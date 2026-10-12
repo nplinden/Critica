@@ -5,6 +5,7 @@
 //   viewer.setGhost(mesh | null);   // translucent x-ray overlay
 //   viewer.fit(bounds);
 //   viewer.setUp("z");              // which model axis points up on screen ("y" default)
+//   viewer.setTheme("light");       // background and grid colors: "dark" (default) or "light"
 //   viewer.setClip(planes);         // cutaway: hide the region where n·p > d for every plane
 //                                   // (0–3 planes {n, d}, model coordinates); [] shows everything
 //
@@ -94,7 +95,13 @@ const lookAt = (eye, at) => {
   };
 };
 
-export function createViewer(canvas, { onPick, background = [0.078, 0.086, 0.102], grid = true } = {}) {
+const THEMES = {
+  dark: { background: [0.078, 0.086, 0.102], gridMinor: [0.17, 0.19, 0.22] },
+  light: { background: [0.925, 0.933, 0.945], gridMinor: [0.78, 0.8, 0.83] },
+};
+
+export function createViewer(canvas, { onPick, theme: initialTheme = "dark", grid = true } = {}) {
+  let theme = THEMES[initialTheme] ?? THEMES.dark;
   const gl = canvas.getContext("webgl2", { antialias: true });
   if (!gl) throw new Error("WebGL2 is not available in this browser");
 
@@ -185,7 +192,7 @@ export function createViewer(canvas, { onPick, background = [0.078, 0.086, 0.102
       pos.push(...a, ...b);
       col.push(...c, ...c);
     };
-    const minor = [0.17, 0.19, 0.22];
+    const minor = theme.gridMinor;
     for (let i = -n; i <= n; i++) {
       const v = i * step;
       const e = n * step;
@@ -268,7 +275,7 @@ export function createViewer(canvas, { onPick, background = [0.078, 0.086, 0.102
     const [w, h] = resize();
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, w, h);
-    gl.clearColor(...background, 1);
+    gl.clearColor(...theme.background, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     const { view, mvp } = matrices(w, h);
     gl.useProgram(prog);
@@ -407,6 +414,14 @@ export function createViewer(canvas, { onPick, background = [0.078, 0.086, 0.102
     setGhost(mesh) {
       if (mesh) ghost.upload({ aPos: mesh.positions, aNormal: mesh.normals }, mesh.indices);
       else ghost.count = 0;
+      redraw();
+    },
+    /** Switches background and grid colors ("dark" or "light"). */
+    setTheme(name) {
+      const next = THEMES[name] ?? THEMES.dark;
+      if (next === theme) return;
+      theme = next;
+      buildGrid(gridSize);
       redraw();
     },
     /** Camera position in model coordinates. */

@@ -7,11 +7,39 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&display=swap">
+<script>
+  // Theme preference (Settings → Appearance): "dark" (default), "light" or "system".
+  try {
+    document.documentElement.dataset.theme = localStorage.getItem("critica.theme") || "dark";
+  } catch {
+    document.documentElement.dataset.theme = "dark";
+  }
+</script>
 <style>
   :root {
     --font-ui: "Ubuntu", system-ui, -apple-system, sans-serif;
     --bg: #14161a; --panel: #1b1e24; --panel-2: #20242b; --line: #2c313a; --line-2: #3a404b;
     --text: #d8dce3; --muted: #8a919e; --accent: #6cb6ff; --accent-bg: #1f3550; --hl: #ffd166; --err: #ff7b72;
+    --overlay: var(--overlay); --cut: #ff9b85; --cut-border: #6a3a33; --shared-border: #2b4a6e;
+    --warn-border: #6b5a2a; --err-border: #6a3a33; --on-accent: #0b1220;
+    color-scheme: dark;
+  }
+  /* Light theme: chosen in Settings, or following the OS when set to System. */
+  :root[data-theme="light"] {
+    --bg: #f3f4f6; --panel: #ffffff; --panel-2: #eef0f3; --line: #dfe3e8; --line-2: #c8ced6;
+    --text: #1f2328; --muted: #5d6876; --accent: #0969da; --accent-bg: #dcebff; --hl: #9a6700; --err: #cf222e;
+    --overlay: rgba(255, 255, 255, 0.94); --cut: #b3372b; --cut-border: #f0c4bd; --shared-border: #b6d4f5;
+    --warn-border: #e8d38f; --err-border: #f0c4bd; --on-accent: #ffffff;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: light) {
+    :root[data-theme="system"] {
+      --bg: #f3f4f6; --panel: #ffffff; --panel-2: #eef0f3; --line: #dfe3e8; --line-2: #c8ced6;
+      --text: #1f2328; --muted: #5d6876; --accent: #0969da; --accent-bg: #dcebff; --hl: #9a6700; --err: #cf222e;
+      --overlay: rgba(255, 255, 255, 0.94); --cut: #b3372b; --cut-border: #f0c4bd; --shared-border: #b6d4f5;
+      --warn-border: #e8d38f; --err-border: #f0c4bd; --on-accent: #ffffff;
+      color-scheme: light;
+    }
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 var(--font-ui); }
@@ -54,8 +82,8 @@
   .caret { width: 14px; text-align: center; color: var(--muted); font-size: 10px; cursor: pointer; flex: none; }
   .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .role { font-size: 10px; padding: 0 5px; border-radius: 8px; border: 1px solid var(--line-2); color: var(--muted); }
-  .role.cut { color: #ff9b85; border-color: #6a3a33; }
-  .order { font-size: 10px; min-width: 16px; height: 16px; line-height: 16px; text-align: center; border-radius: 8px; background: var(--accent); color: #0b1220; font-weight: 700; }
+  .role.cut { color: var(--cut); border-color: var(--cut-border); }
+  .order { font-size: 10px; min-width: 16px; height: 16px; line-height: 16px; text-align: center; border-radius: 8px; background: var(--accent); color: var(--on-accent); font-weight: 700; }
   .eye { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 2px; width: 22px; font-size: 12px; }
   .eye:hover { color: var(--text); }
   .placeholder { height: 24px; display: flex; align-items: center; padding-left: calc(var(--depth) * 16px + 26px); color: var(--muted); font-style: italic; font-size: 12px; position: relative; }
@@ -63,10 +91,10 @@
   .placeholder.drop-inside { color: var(--accent); }
   .section-header { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 14px 12px 4px; border-top: 1px solid var(--line); margin-top: 8px; }
   .badge { font-size: 10px; padding: 0 5px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line-2); color: var(--muted); white-space: nowrap; max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
-  .badge.shared { color: var(--accent); border-color: #2b4a6e; }
+  .badge.shared { color: var(--accent); border-color: var(--shared-border); }
   .ref-name { font-style: italic; }
-  .badge.warn { color: var(--hl); border-color: #6b5a2a; }
-  .badge.err { color: var(--err); border-color: #6a3a33; }
+  .badge.warn { color: var(--hl); border-color: var(--warn-border); }
+  .badge.err { color: var(--err); border-color: var(--err-border); }
   .oid { font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .row.error .name { color: var(--err); }
   .note { color: var(--muted); font-size: 11.5px; line-height: 1.45; margin: 2px 0 6px; }
@@ -161,15 +189,15 @@
 
   /* ---- tool drawer over the canvas ---- */
   .drawer { position: absolute; top: 10px; left: 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; max-height: calc(100% - 50px); }
-  .drawer-body { display: flex; flex-direction: column; gap: 8px; padding: 6px; background: rgba(27, 30, 36, 0.92); border: 1px solid var(--line); border-radius: 8px; overflow-y: auto; }
+  .drawer-body { display: flex; flex-direction: column; gap: 8px; padding: 6px; background: var(--overlay); border: 1px solid var(--line); border-radius: 8px; overflow-y: auto; }
   .drawer.collapsed .drawer-body { display: none; }
-  .drawer-handle { width: 26px; height: 22px; border-radius: 5px; border: 1px solid var(--line); background: rgba(27, 30, 36, 0.92); color: var(--muted); cursor: pointer; line-height: 1; }
+  .drawer-handle { width: 26px; height: 22px; border-radius: 5px; border: 1px solid var(--line); background: var(--overlay); color: var(--muted); cursor: pointer; line-height: 1; }
   .drawer-handle:hover { color: var(--text); }
   .drawer-section { display: grid; grid-template-columns: 1fr; gap: 2px; }
   .drawer-section + .drawer-section { padding-top: 8px; border-top: 1px solid var(--line); }
   .drawer-section .tb { justify-content: flex-start; padding: 4px 8px 4px 6px; }
   .drawer { z-index: 2; }
-  .drawer-menu { position: absolute; left: calc(100% + 6px); top: 28px; display: flex; flex-direction: column; gap: 1px; padding: 6px; min-width: 210px; background: rgba(27, 30, 36, 0.97); border: 1px solid var(--line-2); border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35); }
+  .drawer-menu { position: absolute; left: calc(100% + 6px); top: 28px; display: flex; flex-direction: column; gap: 1px; padding: 6px; min-width: 210px; background: var(--overlay); border: 1px solid var(--line-2); border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35); }
   .drawer-menu[hidden] { display: none; }
   .drawer-menu .tb { justify-content: flex-start; }
   .drawer-menu-title { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 2px 8px 6px; }
@@ -177,8 +205,8 @@
   .panel-actions .tb { padding: 2px 6px; font-size: 12px; color: var(--text); }
   .overlay { position: absolute; display: flex; gap: 6px; align-items: center; }
   .overlay.tr { top: 10px; right: 10px; }
-  .overlay.tr .tb { background: rgba(27, 30, 36, 0.85); border-color: var(--line); }
-  .cutaway-panel { position: absolute; top: 46px; right: 10px; z-index: 3; width: 290px; padding: 8px 10px 10px; background: rgba(27, 30, 36, 0.95); border: 1px solid var(--line-2); border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35); }
+  .overlay.tr .tb { background: var(--overlay); border-color: var(--line); }
+  .cutaway-panel { position: absolute; top: 46px; right: 10px; z-index: 3; width: 290px; padding: 8px 10px 10px; background: var(--overlay); border: 1px solid var(--line-2); border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35); }
   .cutaway-panel[hidden] { display: none; }
   .cut-title { font-size: 10.5px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
   .segmented { display: flex; gap: 0; border: 1px solid var(--line-2); border-radius: 5px; overflow: hidden; }
@@ -193,7 +221,7 @@
   .cut-actions { grid-template-columns: 1fr auto; }
   .cut-actions .check { display: flex; align-items: center; gap: 4px; color: var(--text); font-size: 12px; }
   .cut-actions .tb { border-color: var(--line-2); }
-  .legend { position: absolute; left: 10px; bottom: 30px; max-height: 40%; overflow-y: auto; padding: 6px 10px; background: rgba(27, 30, 36, 0.88); border: 1px solid var(--line); border-radius: 6px; font-size: 12px; pointer-events: auto; }
+  .legend { position: absolute; left: 10px; bottom: 30px; max-height: 40%; overflow-y: auto; padding: 6px 10px; background: var(--overlay); border: 1px solid var(--line); border-radius: 6px; font-size: 12px; pointer-events: auto; }
   .legend[hidden] { display: none; }
   .legend-title { font-size: 10.5px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
   .legend-row { display: flex; align-items: center; gap: 7px; line-height: 1.7; white-space: nowrap; }

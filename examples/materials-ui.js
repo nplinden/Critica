@@ -262,7 +262,8 @@ export function createMaterialsWorkspace(ctx) {
         errors.push(e.message);
       }
     }
-    panel.replaceChildren(
+    // Conditional sections are false when absent; replaceChildren would print them.
+    const sections = [
       h("h2", {}, "Summary"),
       (errors.length > 0 || warnings.length > 0) &&
         h("div", { class: "section" }, errors.map((e) => h("div", { class: "msg-err" }, `✕ ${e}`)), warnings.map((w) => h("div", { class: "msg-warn" }, `⚠ ${w}`))),
@@ -296,7 +297,8 @@ export function createMaterialsWorkspace(ctx) {
           : h("div", { class: "note" }, "No cell uses this material yet."),
       ),
       xml && h("details", { class: "section" }, h("summary", {}, "OpenMC XML"), h("pre", { class: "xml-preview" }, xml)),
-    );
+    ];
+    panel.replaceChildren(...sections.filter(Boolean));
   }
 
   function render() {

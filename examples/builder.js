@@ -129,7 +129,25 @@ const isVoidCell = (n) => isCell(n) && n.fill.type === "material" && String(n.fi
 const geo = await init();
 const evaluator = new Evaluator(geo);
 const meshCache = new WeakMap(); // Solid -> mesh
-const viewer = createViewer($("canvas"), { onPick });
+// ---- theme (a viewer preference: browser storage, not part of the scene) ----
+const THEME_KEY = "critica.theme";
+const systemLight = window.matchMedia("(prefers-color-scheme: light)");
+let themePref = document.documentElement.dataset.theme || "dark"; // set early by index.html
+const effectiveTheme = () => (themePref === "system" ? (systemLight.matches ? "light" : "dark") : themePref);
+
+const viewer = createViewer($("canvas"), { onPick, theme: effectiveTheme() });
+
+function setTheme(pref) {
+  themePref = pref;
+  document.documentElement.dataset.theme = pref;
+  viewer.setTheme(effectiveTheme());
+  try {
+    localStorage.setItem(THEME_KEY, pref);
+  } catch {
+    // Storage unavailable: the choice lasts for this session.
+  }
+}
+systemLight.addEventListener("change", () => viewer.setTheme(effectiveTheme()));
 
 let scene = loadScene();
 let selection = []; // ordered ids; last one is the "primary" shown in properties
@@ -619,6 +637,16 @@ function transformSection(node, { title = "Transform", note } = {}) {
   );
 }
 
+function appearanceSettings() {
+  // Not a scene field: applied directly, no undo step.
+  const select = h(
+    "select",
+    { onchange: (e) => setTheme(e.target.value) },
+    [["dark", "Dark"], ["light", "Light"], ["system", "System (follow the OS)"]].map(([v, l]) => h("option", { value: v, selected: v === themePref }, l)),
+  );
+  return h("div", { class: "section" }, h("h3", {}, "Appearance"), field("Theme", select));
+}
+
 function worldSettings() {
   const w = scene.world;
   const resolved = results.world ?? scene.resolveWorld();
@@ -646,7 +674,7 @@ function renderSettings() {
 }
 
 function renderSettingsBody() {
-  $("settings-body").replaceChildren(worldSettings());
+  $("settings-body").replaceChildren(appearanceSettings(), worldSettings());
 }
 
 // Every modal closes with its ✕ button, Esc (native), or a click on the backdrop.
