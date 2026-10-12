@@ -1,0 +1,11 @@
+# Keep the build context small: only what the image needs.
+target
+knowledge
+node_modules
+js-tests
+tests
+docs
+tools
+.git
+*.stl
+pkg/*.wasm

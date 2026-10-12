@@ -1,0 +1,222 @@
+# geomium
+
+Constructive solid geometry (CSG) in WebAssembly. A dependency-free Rust core
+compiled to a ~65 KB `.wasm`, with a small hand-written ES module wrapper.
+
+```js
+import { init } from "geomium";
+
+const geo = await init();
+
+const body = geo.cube().intersect(geo.sphere({ radius: 1.35 }));
+const rod = geo.cylinder({ radius: 0.6, start: [0, -2, 0], end: [0, 2, 0] });
+const part = body.subtract(rod, rod.rotateX(90), rod.rotateZ(90));
+
+const { positions, normals, indices, tags } = part.toMesh(); // GPU-ready buffers
+const stl = part.toSTL();                                     // binary STL bytes
+console.log(part.volume, part.bounds, part.triangleCount);
+```
+
+## API
+
+**Primitives** (all Y-up): `cube({ center, radius | size })`,
+`sphere({ center, radius, slices, stacks })`,
+`cylinder({ start, end, radius, radiusEnd, slices })`,
+`cone({ start, end, radius, slices })`,
+`torus({ center, major, minor, segments, rings })`,
+`fromMesh(positions, indices)` for closed, CCW-wound triangle meshes.
+
+**Booleans**: `a.union(...)`, `a.subtract(...)`, `a.intersect(...)`,
+`geo.union(...)`, `geo.intersect(...)`, `a.inverse()`. They take any number
+of operands or arrays of operands.
+
+**Transforms**: `translate`, `rotate(axis, degrees)`, `rotateX/Y/Z`, `scale`,
+`mirror("x" | "y" | "z")`, `transform(mat4)` (column-major, e.g. three.js
+`Matrix4.elements`).
+
+**Tags**: `solid.tag(n)` labels polygons. The labels survive booleans and are
+exported per vertex in `toMesh().tags`, so you can color or assign materials
+by source solid.
+
+**Queries**: `volume`, `surfaceArea`, `bounds`, `polygonCount`,
+`triangleCount`, `isEmpty`.
+
+Solids are immutable: every operation returns a new `Solid`. Each one lives in
+wasm memory until you call `dispose()` (or `using` with explicit resource
+management). A `FinalizationRegistry` also frees solids that the JS garbage
+collector reclaims.
+
+## Building
+
+Requires Rust (the toolchain and `wasm32-unknown-unknown` target are pinned in
+`rust-toolchain.toml`) and Node ≥ 18.
+
+```sh
+npm run build   # → pkg/geomium.wasm
+npm test        # Rust unit tests + JS tests against the built wasm
+npm run demo    # builder at http://localhost:8080/
+```
+
+### Builder GUI
+
+`examples/index.html` is a point-and-click modeller:
+
+- **Tool drawer** (floating over the canvas, collapsible): add shapes
+  (Cube, Sphere, Cylinder, Cone, Torus, Half-space) and combine the selection
+  with Union, Subtract, Intersect or Complement; Ungroup and Duplicate. When
+  one operation, cell or universe is selected, new shapes go inside it.
+- **Top bar**: a *File* menu (New, Open… <kbd>Ctrl+O</kbd>, Save
+  <kbd>Ctrl+S</kbd>, Export as → OpenMC XML…), *Settings* (world box, curved-surface
+  tessellation, up axis), and *Help* (Tutorial…, Keyboard shortcuts…
+  <kbd>?</kbd>).
+- **Scene tree**: shows the CSG tree. Subtract children are badged *base* or
+  *cut*, and leaf icons use the same color as the faces they produce.
+  Ctrl-click selects several nodes; the numbers show selection order, and the
+  first selected becomes the Subtract base. Drag rows to reorder or reparent
+  them. The ● toggle excludes a node from its parent without deleting it.
+- **Shared regions**: a region can be used by several cells, as in OpenMC
+  (`water.region = box & ~fuel.region`). Combining a free shape with a region
+  that already belongs to a cell inserts a reference (↪) to it, not a move:
+  the cell keeps its region and both uses stay in sync. The *Reference* tool
+  (<kbd>R</kbd>) adds references explicitly; a reference can be turned into an
+  independent copy. Exports write the shared surfaces once.
+- **Properties**: shape parameters and position, rotation and scale for any
+  node, plus the triangle count, volume and size of the selected node's
+  result.
+- **Viewport**: click a face to select the primitive that produced it
+  (Alt-click selects its top-level group). Selected nodes that are hidden,
+  such as subtracted cutters, are drawn as an x-ray ghost. *Isolate* shows
+  only the selection.
+- Keyboard: <kbd>Ctrl+Z</kbd>/<kbd>Ctrl+Y</kbd> undo/redo, <kbd>Del</kbd>
+  delete, <kbd>Ctrl+D</kbd> duplicate, <kbd>U</kbd>/<kbd>S</kbd>/<kbd>N</kbd>/<kbd>C</kbd>
+  (union/subtract/intersect/complement), <kbd>F</kbd> fit,
+  <kbd>I</kbd> isolate, <kbd>X</kbd> x-ray, <kbd>V</kbd> show void cells,
+  <kbd>M</kbd> color by material (with a legend) instead of by cell.
+- **Cutaway** (<kbd>K</kbd>): slice the view with a section plane along X/Y/Z,
+  remove a quarter around an axis, or remove an eighth (one octant), with
+  position sliders. Cut solids show flat
+  section faces in their colors, and clicking selects the cells inside. It is a
+  display effect only: the geometry is not modified.
+  The scene autosaves to `localStorage`.
+
+The scene model and evaluator (`examples/scene.js`) don't depend on the DOM.
+Each node's result is cached by a structural key, so editing a shape only
+recomputes that node and its ancestors, and undo is instant.
+
+### OpenMC geometry
+
+*File → Open…* (or drag and drop) an OpenMC `geometry.xml` or `model.xml` to edit it.
+*File → Export as → OpenMC XML…* exports the scene back.
+
+- Imported models are fully editable. Each cell's region becomes a tree of
+  half-space, intersect, union and complement nodes. Surfaces are shared:
+  editing one updates every cell that uses it, or use *Use a private copy* to
+  edit one use only. Cells show their material or universe fill, and
+  universes are listed under the tree.
+- New OpenMC geometry can be built directly: *Half-space* (tool drawer) adds a surface
+  (any OpenMC type, with boundary conditions), *Cell* (above the scene tree) wraps a region into a
+  cell with a material or universe fill, and *Universe* adds a universe.
+  Builder primitives can be mixed in; they export as exact analytic surfaces.
+- *Composite* (tool drawer) adds any of OpenMC's 13 composite surfaces
+  (cylinder sector, hexagonal and rectangular prisms with rounded corners,
+  polygon, vessel, …) as one parametric node with an inside/outside side.
+  They export as the primitive surfaces OpenMC would generate, and
+  *Expand to half-spaces* turns one into editable half-spaces.
+- Infinite half-spaces are drawn inside a world box, auto-fitted to the
+  bounded content (or set manually in *Settings*). OpenMC models
+  display Z-up.
+- Not displayed yet: lattices and DAGMC universes. They are kept verbatim and
+  written back on export, and cells filled with them are drawn as grey
+  placeholders.
+
+### Materials
+
+The **Materials** tab edits the material library that cells reference by id
+(the `material="…"` of OpenMC cells).
+
+- Materials hold nuclides and natural elements (optionally enriched, using
+  OpenMC's uranium correlation or two-isotope enrichment), in atom or weight
+  fractions, with any OpenMC density unit (`g/cm3`, `kg/m3`, `atom/b-cm`,
+  `atom/cm3`, `sum`, `macro`), S(α,β) tables, temperature, volume,
+  depletable flag, isotropic nuclides, macroscopic and NCrystal options.
+- *Library…* adds any of the 411 reference materials of the PNNL compendium
+  (PNNL-15870 Rev. 2) that OpenMC bundles; *+ Formula* adds a chemical formula.
+- A live summary shows mass and atom densities, molar mass, element and
+  nuclide breakdowns, validation errors, the cells using the material, and the
+  exact XML. The arithmetic ports `openmc.Material` (densities) and
+  `openmc.Element.expand` (natural expansion and enrichment).
+- Elements are expanded into natural isotopes on export, as the Python API
+  does. Imported nuclide lists that reproduce a natural composition are shown
+  as elements again.
+- *File → Open* a `materials.xml` adds its materials; *File → Export as* writes
+  `materials.xml`, `geometry.xml`, or a `model.xml` with both (plus the
+  settings and tallies of an opened `model.xml`).
+
+Nuclear data (natural abundances, AME2020 masses, thermal table names) and the
+PNNL library are generated from an OpenMC checkout with `npm run gen:data`
+(`tools/gen_nuclear_data.py`).
+
+See [docs/openmc.md](docs/openmc.md) for the mapping, the conventions checked
+against OpenMC's source, and the extension points planned for lattices.
+
+### Script playground
+
+`examples/playground.html` (not linked from the builder; open it directly at
+`/examples/playground.html`) is a live editor. You write JS against `geo`,
+return a solid, then orbit it in WebGL and download it as STL.
+
+## Deployment
+
+The app is static files (pages, JS modules and the wasm), so any web server
+works. The `Dockerfile` builds the wasm in a Rust stage and serves everything
+with an unprivileged nginx (`deploy/nginx.conf`: gzip, correct
+`application/wasm` type, revalidating caches, `/` → `/examples/`).
+
+```sh
+docker build -t geomium .
+docker run -d --name geomium -p 8080:8080 --restart unless-stopped geomium
+# → http://<server>:8080/
+```
+
+Or with Compose:
+
+```yaml
+services:
+  geomium:
+    build: .
+    ports: ["8080:8080"]
+    restart: unless-stopped
+```
+
+For HTTPS, put it behind your reverse proxy (Caddy, Traefik, nginx) and
+forward to port 8080; redirects are relative, so no extra configuration is
+needed. Everything runs in the visitor's browser: the server stores nothing,
+and scenes stay in each user's browser storage. The pages load the Ubuntu font
+from Google Fonts.
+
+## How it works
+
+- **Algorithm**: the BSP-tree boolean scheme from Evan Wallace's csg.js. Both
+  operands are compiled into BSP trees, each tree clips the other's polygons,
+  and the surviving polygons are merged. The BSP lives in an arena and every
+  traversal is a loop rather than recursion. Convex inputs degenerate into
+  chains as deep as their polygon count, and a recursive version would
+  overflow the wasm stack on high-resolution spheres.
+- **Robustness**: planes come from Newell's method; degenerate polygons and
+  repeated vertices are dropped. A bounding-box check short-circuits booleans
+  on disjoint operands. Mirroring transforms reverse winding so solids stay
+  outward-facing.
+- **FFI**: plain `extern "C"` exports with `u32` handles into a table inside
+  wasm (0 means error). Bulk data crosses through linear memory. No
+  wasm-bindgen or wasm-pack is needed, only `cargo`.
+
+## Limitations
+
+- Output is a polygon soup with T-junctions, as with any BSP CSG. Fine for
+  rendering and most STL slicers; weld vertices first if you need a strict
+  manifold.
+- BSP booleans fragment polygons. Long chains of operations on dense meshes
+  grow triangle counts quickly (the "Swiss cheese" example reaches ~126k
+  triangles).
+- Uses a fixed 1e-5 epsilon, so very small or very large models should be
+  scaled toward unit size.

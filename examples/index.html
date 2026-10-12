@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Geomium Builder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&display=swap">
+<style>
+  :root {
+    --font-ui: "Ubuntu", system-ui, -apple-system, sans-serif;
+    --bg: #14161a; --panel: #1b1e24; --panel-2: #20242b; --line: #2c313a; --line-2: #3a404b;
+    --text: #d8dce3; --muted: #8a919e; --accent: #6cb6ff; --accent-bg: #1f3550; --hl: #ffd166; --err: #ff7b72;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 var(--font-ui); }
+  body { display: grid; grid-template-rows: auto 1fr; }
+  button, select, input { font: inherit; color: inherit; }
+  svg.icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; }
+
+  /* ---- toolbar ---- */
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .toolbar h1 { font-size: 14px; font-weight: 500; margin: 0 8px 0 2px; }
+  .group { display: flex; gap: 2px; padding-right: 8px; margin-right: 2px; border-right: 1px solid var(--line); }
+  .group:last-of-type { border-right: 0; }
+  .spacer { flex: 1; }
+  .tb { display: inline-flex; align-items: center; gap: 5px; background: transparent; border: 1px solid transparent; border-radius: 5px; padding: 4px 8px; cursor: pointer; white-space: nowrap; }
+  .tb:hover:not(:disabled) { background: var(--panel-2); border-color: var(--line-2); }
+  .tb:disabled { opacity: 0.35; cursor: default; }
+  .tb.on { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
+  .toolbar a { color: var(--accent); text-decoration: none; padding: 0 4px; }
+
+  /* ---- layout ---- */
+  main { display: grid; grid-template-columns: 270px 1fr 280px; min-height: 0; }
+  .panel { background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+  .panel > h2 { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 0; padding: 10px 12px 6px; display: flex; align-items: center; justify-content: space-between; }
+  #outline { border-right: 1px solid var(--line); }
+  #props { border-left: 1px solid var(--line); overflow-y: auto; }
+
+  /* ---- tree ---- */
+  #tree { flex: 1; overflow: auto; padding: 2px 0 24px; outline: none; }
+  #tree.drop-root { box-shadow: inset 0 0 0 2px var(--accent); }
+  .row { position: relative; display: flex; align-items: center; gap: 5px; height: 26px; padding: 0 6px 0 calc(var(--depth) * 16px + 6px); cursor: default; user-select: none; border: 1px solid transparent; }
+  .row::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--depth) * 16px); background: repeating-linear-gradient(to right, transparent 0 13px, var(--line-2) 13px 14px, transparent 14px 16px); }
+  .row:hover { background: var(--panel-2); }
+  .row.selected { background: var(--accent-bg); }
+  .row.primary { border-color: var(--accent); }
+  .row.disabled .name, .row.disabled svg { opacity: 0.4; }
+  .row.disabled .name { text-decoration: line-through; }
+  .row.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+  .row.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+  .row.drop-inside { background: var(--accent-bg); border-color: var(--accent); border-style: dashed; }
+  .caret { width: 14px; text-align: center; color: var(--muted); font-size: 10px; cursor: pointer; flex: none; }
+  .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .role { font-size: 10px; padding: 0 5px; border-radius: 8px; border: 1px solid var(--line-2); color: var(--muted); }
+  .role.cut { color: #ff9b85; border-color: #6a3a33; }
+  .order { font-size: 10px; min-width: 16px; height: 16px; line-height: 16px; text-align: center; border-radius: 8px; background: var(--accent); color: #0b1220; font-weight: 700; }
+  .eye { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 2px; width: 22px; font-size: 12px; }
+  .eye:hover { color: var(--text); }
+  .placeholder { height: 24px; display: flex; align-items: center; padding-left: calc(var(--depth) * 16px + 26px); color: var(--muted); font-style: italic; font-size: 12px; position: relative; }
+  .placeholder::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--depth) * 16px); background: repeating-linear-gradient(to right, transparent 0 13px, var(--line-2) 13px 14px, transparent 14px 16px); }
+  .placeholder.drop-inside { color: var(--accent); }
+  .section-header { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 14px 12px 4px; border-top: 1px solid var(--line); margin-top: 8px; }
+  .badge { font-size: 10px; padding: 0 5px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line-2); color: var(--muted); white-space: nowrap; max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
+  .badge.shared { color: var(--accent); border-color: #2b4a6e; }
+  .ref-name { font-style: italic; }
+  .badge.warn { color: var(--hl); border-color: #6b5a2a; }
+  .badge.err { color: var(--err); border-color: #6a3a33; }
+  .oid { font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .row.error .name { color: var(--err); }
+  .note { color: var(--muted); font-size: 11.5px; line-height: 1.45; margin: 2px 0 6px; }
+  .tree-help { color: var(--muted); padding: 10px 12px; font-size: 12px; border-top: 1px solid var(--line); }
+  kbd { font: 500 11px var(--font-ui); background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 3px; padding: 0 4px; }
+
+  /* ---- viewport ---- */
+  #view { position: relative; min-width: 0; min-height: 0; }
+  #canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+  /* ---- menu bar ---- */
+  .menubar { display: flex; gap: 2px; }
+  .menu { position: relative; }
+  .menu-button[aria-expanded="true"] { background: var(--panel-2); border-color: var(--line-2); }
+  .menu-list { position: absolute; top: calc(100% + 4px); left: 0; z-index: 20; min-width: 190px; display: flex; flex-direction: column; padding: 4px; background: var(--panel); border: 1px solid var(--line-2); border-radius: 6px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45); }
+  .menu-list[hidden] { display: none; }
+  .menu-item { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; padding: 5px 10px; border: 0; border-radius: 4px; background: none; text-align: left; cursor: pointer; white-space: nowrap; }
+  .menu-item:hover, .menu-item:focus-visible, .menu-item[aria-expanded="true"] { background: var(--accent-bg); outline: none; }
+  .menu-item kbd { background: none; border: 0; color: var(--muted); padding: 0; }
+  .menu-sep { height: 1px; margin: 4px 6px; background: var(--line); }
+  .submenu { position: relative; }
+  .submenu-list { top: -5px; left: calc(100% + 2px); }
+  .chevron { color: var(--muted); font-size: 10px; }
+
+  /* ---- workspace tabs ---- */
+  .tabs { display: flex; gap: 2px; margin-left: 18px; padding: 2px; background: var(--bg); border: 1px solid var(--line); border-radius: 7px; }
+  .tab { background: none; border: 0; border-radius: 5px; padding: 3px 14px; cursor: pointer; color: var(--muted); }
+  .tab:hover { color: var(--text); }
+  .tab.on { background: var(--panel-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line-2); }
+  main[hidden] { display: none; }
+
+  /* ---- materials workspace ---- */
+  .materials-main { display: grid; grid-template-columns: 280px minmax(420px, 1fr) 360px; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
+  .mat-status { grid-column: 1 / -1; min-height: 24px; padding: 4px 12px; border-top: 1px solid var(--line); background: var(--panel); color: var(--muted); font-size: 12px; }
+  .mat-status.error { color: var(--err); }
+  #mat-list-panel { border-right: 1px solid var(--line); }
+  #mat-editor { overflow-y: auto; }
+  #mat-summary { border-left: 1px solid var(--line); overflow-y: auto; }
+  .mat-search-row { padding: 0 10px 6px; }
+  #mat-list { flex: 1; overflow-y: auto; padding-bottom: 8px; }
+  .mat-row { display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 10px; cursor: default; border: 1px solid transparent; }
+  .mat-row:hover { background: var(--panel-2); }
+  .mat-row.selected { background: var(--accent-bg); border-color: var(--accent); }
+  .mat-row .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mat-list-actions { display: flex; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--line); }
+  .mat-list-actions .tb { border-color: var(--line-2); }
+  #mat-editor .section, #mat-summary .section { max-width: 760px; }
+  .density-row { display: grid; grid-template-columns: 1fr 1.3fr; gap: 6px; margin: 5px 0; }
+  .unit-input { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; }
+  .comp-head, .comp-row { display: grid; grid-template-columns: 96px 1fr 1.1fr 30px 30px; gap: 6px; align-items: center; margin: 4px 0; }
+  .comp-head { color: var(--muted); font-size: 11.5px; margin-bottom: 0; }
+  .enrich-row { padding-left: 16px; grid-template-columns: 80px 1fr 1.1fr 0.8fr 30px; }
+  .sab-row { display: grid; grid-template-columns: 1fr 90px 30px; gap: 6px; margin: 4px 0; }
+  .formula-row { display: grid; grid-template-columns: 1fr 80px auto; gap: 6px; margin-top: 8px; }
+  .formula-row .tb, .props-actions .tb { border-color: var(--line-2); }
+  .icon-btn { justify-content: center; padding: 3px 0; border-color: var(--line-2); }
+  .icon-btn.on { background: var(--accent-bg); color: var(--accent); }
+  .muted { color: var(--muted); font-size: 12px; }
+  details.section > summary { cursor: pointer; color: var(--muted); font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; margin: 8px 0 6px; }
+  .comp-table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .comp-table th { text-align: right; color: var(--muted); font-weight: 400; padding: 2px 4px; }
+  .comp-table td { text-align: right; padding: 2px 4px; border-top: 1px solid var(--line); }
+  .comp-table th:first-child, .comp-table td:first-child { text-align: left; }
+  .msg-err { color: var(--err); margin: 3px 0; }
+  .msg-warn { color: var(--hl); margin: 3px 0; }
+  .users { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  .xml-preview { margin: 0; padding: 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 5px; overflow: auto; max-height: 260px; font-size: 11.5px; line-height: 1.45; white-space: pre; }
+  .library-search-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; margin-bottom: 8px; }
+  #library-list { max-height: 55vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; }
+  .lib-row { display: flex; justify-content: space-between; gap: 12px; width: 100%; padding: 6px 10px; background: none; border: 0; border-bottom: 1px solid var(--line); text-align: left; cursor: pointer; }
+  .lib-row:hover { background: var(--accent-bg); }
+  @media (max-width: 1100px) { .materials-main { grid-template-columns: 240px 1fr; } #mat-summary { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--line); } }
+
+  /* ---- dialogs ---- */
+  dialog.modal { width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 64px); padding: 0; border: 1px solid var(--line-2); border-radius: 10px; background: var(--panel); color: var(--text); box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5); }
+  dialog.modal[open] { display: flex; flex-direction: column; }
+  dialog.modal::backdrop { background: rgba(0, 0, 0, 0.45); }
+  dialog#tutorial, dialog#shortcuts { width: min(560px, calc(100vw - 32px)); }
+  .dialog-body { overflow-y: auto; padding: 4px 16px 16px; line-height: 1.55; }
+  .dialog-body h3 { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 14px 0 6px; }
+  .dialog-body p, .dialog-body ol, .dialog-body ul { margin: 4px 0 8px; }
+  .dialog-body ol, .dialog-body ul { padding-left: 20px; }
+  .dialog-body li { margin: 3px 0; }
+  .dialog-body b { color: var(--text); font-weight: 500; }
+  .shortcut-table { width: 100%; border-collapse: collapse; }
+  .shortcut-table td { padding: 4px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .shortcut-table td:first-child { width: 42%; white-space: nowrap; padding-right: 12px; }
+  .shortcut-table kbd + kbd { margin-left: 4px; }
+  .link-button { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; }
+  .dialog-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px 6px; border-bottom: 1px solid var(--line); }
+  .dialog-head h2 { font-size: 14px; font-weight: 500; margin: 0; }
+  #settings-body .section { border-bottom: 0; padding-bottom: 14px; }
+
+  /* ---- tool drawer over the canvas ---- */
+  .drawer { position: absolute; top: 10px; left: 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; max-height: calc(100% - 50px); }
+  .drawer-body { display: flex; flex-direction: column; gap: 8px; padding: 6px; background: rgba(27, 30, 36, 0.92); border: 1px solid var(--line); border-radius: 8px; overflow-y: auto; }
+  .drawer.collapsed .drawer-body { display: none; }
+  .drawer-handle { width: 26px; height: 22px; border-radius: 5px; border: 1px solid var(--line); background: rgba(27, 30, 36, 0.92); color: var(--muted); cursor: pointer; line-height: 1; }
+  .drawer-handle:hover { color: var(--text); }
+  .drawer-section { display: grid; grid-template-columns: 1fr; gap: 2px; }
+  .drawer-section + .drawer-section { padding-top: 8px; border-top: 1px solid var(--line); }
+  .drawer-section .tb { justify-content: flex-start; padding: 4px 8px 4px 6px; }
+  .drawer { z-index: 2; }
+  .drawer-menu { position: absolute; left: calc(100% + 6px); top: 28px; display: flex; flex-direction: column; gap: 1px; padding: 6px; min-width: 210px; background: rgba(27, 30, 36, 0.97); border: 1px solid var(--line-2); border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35); }
+  .drawer-menu[hidden] { display: none; }
+  .drawer-menu .tb { justify-content: flex-start; }
+  .drawer-menu-title { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 2px 8px 6px; }
+  .panel-actions { display: flex; gap: 2px; text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .panel-actions .tb { padding: 2px 6px; font-size: 12px; color: var(--text); }
+  .overlay { position: absolute; display: flex; gap: 6px; align-items: center; }
+  .overlay.tr { top: 10px; right: 10px; }
+  .overlay.tr .tb { background: rgba(27, 30, 36, 0.85); border-color: var(--line); }
+  .cutaway-panel { position: absolute; top: 46px; right: 10px; z-index: 3; width: 290px; padding: 8px 10px 10px; background: rgba(27, 30, 36, 0.95); border: 1px solid var(--line-2); border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35); }
+  .cutaway-panel[hidden] { display: none; }
+  .cut-title { font-size: 10.5px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .segmented { display: flex; gap: 0; border: 1px solid var(--line-2); border-radius: 5px; overflow: hidden; }
+  .segmented .seg { flex: 1; justify-content: center; border: 0; border-radius: 0; padding: 3px 8px; }
+  .segmented .seg + .seg { border-left: 1px solid var(--line-2); }
+  .segmented .seg.on { background: var(--accent-bg); color: var(--accent); border-color: var(--line-2); }
+  .cut-row { display: grid; grid-template-columns: 52px 1fr auto; align-items: center; gap: 8px; margin-top: 8px; }
+  .cut-row > label { color: var(--muted); font-size: 12px; }
+  .cut-row .segmented { grid-column: 2 / 4; }
+  .cut-row input[type=range] { width: 100%; accent-color: var(--accent); }
+  .cut-value { font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--muted); min-width: 44px; text-align: right; }
+  .cut-actions { grid-template-columns: 1fr auto; }
+  .cut-actions .check { display: flex; align-items: center; gap: 4px; color: var(--text); font-size: 12px; }
+  .cut-actions .tb { border-color: var(--line-2); }
+  .legend { position: absolute; left: 10px; bottom: 30px; max-height: 40%; overflow-y: auto; padding: 6px 10px; background: rgba(27, 30, 36, 0.88); border: 1px solid var(--line); border-radius: 6px; font-size: 12px; pointer-events: auto; }
+  .legend[hidden] { display: none; }
+  .legend-title { font-size: 10.5px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+  .legend-row { display: flex; align-items: center; gap: 7px; line-height: 1.7; white-space: nowrap; }
+  .legend-row.muted { color: var(--muted); }
+  .swatch { width: 11px; height: 11px; border-radius: 2px; flex: none; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3); }
+  #status { position: absolute; left: 10px; bottom: 8px; right: 10px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; pointer-events: none; display: flex; justify-content: space-between; gap: 12px; }
+  #status.error #msg { color: var(--err); }
+  #msg { white-space: pre-wrap; }
+  #stats { white-space: nowrap; }
+
+  /* ---- properties ---- */
+  .section { padding: 4px 12px 12px; border-bottom: 1px solid var(--line); }
+  .section h3 { font-size: 11px; font-weight: 500; color: var(--muted); margin: 8px 0 6px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .field { display: grid; grid-template-columns: 76px 1fr; align-items: center; gap: 6px; margin: 5px 0; }
+  .field > label { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+  .vec { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  .vec.vec2 { grid-template-columns: repeat(2, 1fr); }
+  .field-wide { grid-template-columns: 1fr; }
+  .color-field { display: flex; align-items: center; gap: 8px; }
+  .color-field input[type=color] { width: 38px; height: 24px; padding: 0 2px; border: 1px solid var(--line-2); border-radius: 4px; background: var(--bg); cursor: pointer; }
+  .color-field .tb { margin-left: auto; padding: 2px 8px; border-color: var(--line-2); }
+  #props textarea { width: 100%; resize: vertical; background: var(--bg); color: var(--text); border: 1px solid var(--line-2); border-radius: 4px; padding: 4px 6px; font: 12.5px/1.5 var(--font-ui); font-variant-numeric: tabular-nums; }
+  #props textarea:focus { outline: none; border-color: var(--accent); }
+  .vec input:nth-child(1) { border-bottom-color: #a14848; }
+  .vec input:nth-child(2) { border-bottom-color: #4b8a4b; }
+  .vec input:nth-child(3) { border-bottom-color: #4560a8; }
+  input[type=number], input[type=text], select { width: 100%; min-width: 0; background: var(--bg); border: 1px solid var(--line-2); border-radius: 4px; padding: 3px 6px; }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  .props-actions { display: flex; gap: 6px; margin-top: 8px; }
+  .props-actions .tb { border-color: var(--line-2); }
+  .info { display: grid; grid-template-columns: auto 1fr; column-gap: 14px; font-size: 12.5px; line-height: 1.7; font-variant-numeric: tabular-nums; }
+  .info-label { color: var(--muted); }
+  .empty-props { padding: 12px; color: var(--muted); line-height: 1.6; }
+  .empty-props ul { padding-left: 16px; margin: 6px 0; }
+
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; grid-template-rows: 40vh 220px auto; }
+    #outline { order: 2; border-right: 0; border-top: 1px solid var(--line); }
+    #view { order: 1; }
+    #props { order: 3; border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
+    body { height: auto; }
+    .drawer-section .label { display: none; }
+  }
+</style>
+</head>
+<body>
+<header class="toolbar">
+  <h1>geomium</h1>
+  <nav class="menubar" aria-label="Main menu">
+    <div class="menu">
+      <button class="tb menu-button" id="file-menu-button" aria-haspopup="menu" aria-expanded="false" aria-controls="file-menu">File</button>
+      <div class="menu-list" id="file-menu" role="menu" hidden>
+        <button class="menu-item" role="menuitem" id="new" title="Start an empty scene">New</button>
+        <button class="menu-item" role="menuitem" id="open" title="Open a scene (.json) or an OpenMC geometry.xml / model.xml — or drop a file anywhere">Open… <kbd>Ctrl+O</kbd></button>
+        <button class="menu-item" role="menuitem" id="save" title="Download the scene as JSON">Save <kbd>Ctrl+S</kbd></button>
+        <div class="menu-sep" role="separator"></div>
+        <div class="submenu">
+          <button class="menu-item" role="menuitem" aria-haspopup="menu" aria-expanded="false" id="export-menu-button">Export as <span class="chevron">▸</span></button>
+          <div class="menu-list submenu-list" role="menu" id="export-menu" hidden>
+            <button class="menu-item" role="menuitem" id="export-model" title="Materials, geometry and any settings/tallies from the opened file">OpenMC model.xml…</button>
+            <button class="menu-item" role="menuitem" id="export-geometry" title="Just the geometry">OpenMC geometry.xml…</button>
+            <button class="menu-item" role="menuitem" id="export-materials" title="Just the material library">OpenMC materials.xml…</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <button class="tb" id="settings-open" title="Scene settings: world box, tessellation, up axis">Settings</button>
+    <div class="menu">
+      <button class="tb menu-button" id="help-menu-button" aria-haspopup="menu" aria-expanded="false" aria-controls="help-menu">Help</button>
+      <div class="menu-list" id="help-menu" role="menu" hidden>
+        <button class="menu-item" role="menuitem" id="tutorial-open">Tutorial…</button>
+        <button class="menu-item" role="menuitem" id="shortcuts-open">Keyboard shortcuts… <kbd>?</kbd></button>
+      </div>
+    </div>
+  </nav>
+  <div class="tabs" role="tablist" aria-label="Workspace">
+    <button class="tab on" role="tab" id="tab-geometry" aria-selected="true" aria-controls="ws-geometry">Geometry</button>
+    <button class="tab" role="tab" id="tab-materials" aria-selected="false" aria-controls="ws-materials">Materials</button>
+  </div>
+  <input type="file" id="file" accept=".json,.xml,.dat,application/json,application/xml" hidden>
+</header>
+<dialog class="modal" id="tutorial" aria-labelledby="tutorial-title">
+  <div class="dialog-head">
+    <h2 id="tutorial-title">Tutorial</h2>
+    <button class="tb dialog-close" title="Close (Esc)" aria-label="Close">✕</button>
+  </div>
+  <div class="dialog-body" id="tutorial-body"></div>
+</dialog>
+<dialog class="modal" id="shortcuts" aria-labelledby="shortcuts-title">
+  <div class="dialog-head">
+    <h2 id="shortcuts-title">Keyboard shortcuts</h2>
+    <button class="tb dialog-close" title="Close (Esc)" aria-label="Close">✕</button>
+  </div>
+  <div class="dialog-body" id="shortcuts-body"></div>
+</dialog>
+<dialog class="modal" id="settings" aria-labelledby="settings-title">
+  <div class="dialog-head">
+    <h2 id="settings-title">Scene settings</h2>
+    <button class="tb dialog-close" title="Close (Esc)" aria-label="Close">✕</button>
+  </div>
+  <div id="settings-body"></div>
+</dialog>
+<main id="ws-geometry" role="tabpanel" aria-labelledby="tab-geometry">
+  <section class="panel" id="outline">
+    <h2>Scene tree <span class="panel-actions" id="tree-actions"></span></h2>
+    <div id="tree" tabindex="0"></div>
+    <div class="tree-help">Click to select, <kbd>Ctrl</kbd>-click for several (the order matters for Subtract). Drag rows to move them.</div>
+  </section>
+  <section id="view">
+    <canvas id="canvas"></canvas>
+    <div class="drawer" id="drawer">
+      <button class="drawer-handle" id="drawer-toggle" title="Show or hide the tools" aria-expanded="true">‹</button>
+      <div class="drawer-body">
+        <div class="drawer-section" id="primitives" aria-label="Add shapes"></div>
+        <div class="drawer-section" id="composites" aria-label="Composite surfaces"></div>
+        <div class="drawer-section" id="operations" aria-label="Combine selection"></div>
+      </div>
+    </div>
+    <div class="overlay tr">
+      <button class="tb" id="cutaway-toggle" title="Cutaway: section plane, quarter or eighth cut (K)">Cutaway</button>
+      <button class="tb" id="color-material" title="Color by material, with a legend (M)">Materials</button>
+      <button class="tb" id="void" title="Show void cells (V)">Void</button>
+      <button class="tb" id="isolate" title="Show only the selected nodes (I)">Isolate</button>
+      <button class="tb" id="xray" title="Show hidden selected nodes as an x-ray ghost (X)">X-ray</button>
+      <button class="tb" id="fit" title="Frame the visible geometry (F)">Fit</button>
+    </div>
+    <div class="cutaway-panel" id="cutaway-panel" hidden></div>
+    <div class="legend" id="legend" hidden></div>
+    <div id="status"><span id="msg">loading…</span><span id="stats"></span></div>
+  </section>
+  <aside class="panel" id="props"></aside>
+</main>
+<main id="ws-materials" class="materials-main" role="tabpanel" aria-labelledby="tab-materials" hidden>
+  <section class="panel" id="mat-list-panel">
+    <h2>Material library <span class="panel-actions"><button class="tb" id="mat-new" title="New empty material">New</button><button class="tb" id="mat-library" title="Add a reference material from the PNNL compendium bundled with OpenMC">Library…</button></span></h2>
+    <div class="mat-search-row"><input type="text" id="mat-search" placeholder="Filter by id or name" spellcheck="false"></div>
+    <div id="mat-list"></div>
+    <div class="mat-list-actions"><button class="tb" id="mat-duplicate">Duplicate</button><button class="tb" id="mat-delete">Delete</button></div>
+  </section>
+  <section class="panel" id="mat-editor"></section>
+  <aside class="panel" id="mat-summary"></aside>
+  <div class="mat-status" id="mat-status"></div>
+</main>
+<dialog class="modal" id="library-picker" aria-labelledby="library-title">
+  <div class="dialog-head">
+    <h2 id="library-title">Material library</h2>
+    <button class="tb dialog-close" title="Close (Esc)" aria-label="Close">✕</button>
+  </div>
+  <div class="dialog-body">
+    <p class="note" id="library-source"></p>
+    <div class="library-search-row"><input type="text" id="library-search" placeholder="Search (e.g. water, steel, concrete)" spellcheck="false"><span class="muted" id="library-count"></span></div>
+    <div id="library-list"></div>
+  </div>
+</dialog>
+<script type="module" src="builder.js"></script>
+</body>
+</html>
