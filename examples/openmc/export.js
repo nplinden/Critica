@@ -33,7 +33,7 @@ const or = (args) => {
 const not = (a) => (a.op === "empty" ? FULL : a.op === "full" ? EMPTY : a.op === "not" ? a.arg : a.op === "half" ? { ...a, sense: a.sense === "-" ? "+" : "-" } : { op: "not", arg: a });
 
 /** Local surfaces of a primitive: [surface, sense] pairs whose intersection is the solid. */
-function primitiveSurfaces(node) {
+export function primitiveSurfaces(node) {
   const p = node.params;
   switch (node.kind) {
     case "cube": {
