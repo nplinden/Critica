@@ -193,13 +193,22 @@ export function createViewer(canvas, { onPick, theme: initialTheme = "dark", gri
       col.push(...c, ...c);
     };
     const minor = theme.gridMinor;
+    // The grid lives in display space (screen up = display Y). Color its axis
+    // lines by the model axis they show, as in the forms: X red, Y green, Z blue.
+    // With Z up, display Y is model Z and display Z is model −Y.
+    const RED = [0.85, 0.3, 0.3];
+    const GREEN = [0.35, 0.8, 0.35];
+    const BLUE = [0.25, 0.4, 0.85];
+    const zUp = model === MODEL_Z_UP;
+    const depthAxis = zUp ? GREEN : BLUE; // the horizontal line running into the screen
+    const upAxis = zUp ? BLUE : GREEN; // the vertical stub
     for (let i = -n; i <= n; i++) {
       const v = i * step;
       const e = n * step;
-      line([v, 0, -e], [v, 0, e], i === 0 ? [0.25, 0.4, 0.85] : minor); // along Z: blue at x=0
-      line([-e, 0, v], [e, 0, v], i === 0 ? [0.85, 0.3, 0.3] : minor); // along X: red at z=0
+      line([v, 0, -e], [v, 0, e], i === 0 ? depthAxis : minor);
+      line([-e, 0, v], [e, 0, v], i === 0 ? RED : minor);
     }
-    line([0, 0, 0], [0, step * 2, 0], [0.35, 0.8, 0.35]); // +Y stub
+    line([0, 0, 0], [0, step * 2, 0], upAxis);
     lines.upload({ aPos: new Float32Array(pos), aColor: new Float32Array(col) });
     lineCount = pos.length / 3;
   }
@@ -440,6 +449,7 @@ export function createViewer(canvas, { onPick, theme: initialTheme = "dark", gri
       const next = axis === "z" ? MODEL_Z_UP : MODEL_IDENTITY;
       if (next !== model) {
         model = next;
+        buildGrid(gridSize); // axis colors depend on which model axis is up
         redraw();
       }
     },
