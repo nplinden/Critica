@@ -22,8 +22,8 @@ import { SURFACE_TYPES, BOUNDARY_TYPES } from "./openmc/surfaces.js";
 import { compositeExpansion, isIdentity } from "./scene.js";
 import { importOpenMC, importMaterialsXML } from "./openmc/import.js";
 import { exportOpenMC, exportMaterialsXML, primitiveSurfaces } from "./openmc/export.js";
-import { transformSurface } from "./openmc/surfaces.js";
-import { fromTransform } from "./mat4.js";
+import { transformSurface, toForm, transformForm, isPlane } from "./openmc/surfaces.js";
+import { fromTransform, multiply, IDENTITY } from "./mat4.js";
 import { createMaterialsWorkspace } from "./materials-ui.js";
 import { COMPOSITE_TYPES } from "./openmc/composite.js";
 
@@ -334,10 +334,109 @@ function renderLegend(tags) {
   legend.hidden = false;
 }
 
+// ---- plane half-spaces drawn as planes with arrows ----
+
+/** Whether a node is a half-space of a plane surface. */
+function isPlaneHalfspace(node) {
+  return node?.kind === "halfspace" && isPlane(scene.surfaces.get(node.params.surface)?.type ?? "");
+}
+
+/**
+ * Transform from a node's frame to the root frame (product of ancestor
+ * region transforms; cells do not transform their region). Null when the node
+ * lives in a universe, whose frame is not the root's.
+ */
+function rootMatrixOf(id) {
+  let m = IDENTITY;
+  for (const a of scene.ancestors(id)) {
+    const n = scene.find(a).node;
+    if (isUniverse(n)) return null;
+    if (!isCell(n) && !isIdentity(n.transform)) m = multiply(fromTransform(n.transform), m);
+  }
+  return m;
+}
+
+/** Convex polygon where the plane n·p = d cuts the box, ordered around its centroid. */
+function planeBoxPolygon(n, d, box) {
+  const corner = (i) => [0, 1, 2].map((k) => ((i >> k) & 1 ? box.max[k] : box.min[k]));
+  const pts = [];
+  for (let i = 0; i < 8; i++) {
+    for (let k = 0; k < 3; k++) {
+      const j = i | (1 << k);
+      if (j === i) continue;
+      const a = corner(i);
+      const b = corner(j);
+      const fa = n[0] * a[0] + n[1] * a[1] + n[2] * a[2] - d;
+      const fb = n[0] * b[0] + n[1] * b[1] + n[2] * b[2] - d;
+      if ((fa <= 0 && fb >= 0) || (fa >= 0 && fb <= 0)) {
+        const t = fa === fb ? 0 : fa / (fa - fb);
+        pts.push(a.map((v, q) => v + (b[q] - v) * t));
+      }
+    }
+  }
+  if (pts.length < 3) return null;
+  const c = [0, 1, 2].map((k) => pts.reduce((s, p) => s + p[k], 0) / pts.length);
+  const helper = Math.abs(n[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+  const cr = (x, y) => [x[1] * y[2] - x[2] * y[1], x[2] * y[0] - x[0] * y[2], x[0] * y[1] - x[1] * y[0]];
+  const u = cr(n, helper);
+  const v = cr(n, u);
+  const angle = (p) => {
+    const q = p.map((x, k) => x - c[k]);
+    return Math.atan2(q[0] * v[0] + q[1] * v[1] + q[2] * v[2], q[0] * u[0] + q[1] * u[1] + q[2] * u[2]);
+  };
+  const ordered = pts.sort((p, q) => angle(p) - angle(q)).filter((p, i, arr) => i === 0 || Math.hypot(...p.map((x, k) => x - arr[i - 1][k])) > 1e-9);
+  return ordered.length >= 3 ? { polygon: ordered, centroid: c } : null;
+}
+
+/**
+ * Box the plane sheets are drawn in: a cube around the world box, 1.5× its
+ * largest side, so every plane gets a readable square even when the world box
+ * hugs a small or flat model.
+ */
+function gizmoBox() {
+  const w = results.world;
+  if (!w) return null;
+  const c = w.min.map((v, i) => (v + w.max[i]) / 2);
+  const half = Math.max(1, 0.75 * Math.max(...w.max.map((v, i) => v - w.min[i])));
+  return { min: c.map((v) => v - half), max: c.map((v) => v + half) };
+}
+
+/** Sheet + arrows for a plane half-space (arrows point into the kept side). */
+function planeGizmo(node, color) {
+  const m = rootMatrixOf(node.id);
+  const box = gizmoBox();
+  if (!m || !box) return null;
+  const local = isIdentity(node.transform) ? m : multiply(m, fromTransform(node.transform));
+  const form = transformForm(toForm(scene.surfaces.get(node.params.surface)), local);
+  const [a, b, c, e] = form.L;
+  const len = Math.hypot(a, b, c);
+  if (!(len > 0)) return null;
+  const n = [a / len, b / len, c / len];
+  const cut = planeBoxPolygon(n, -e / len, box);
+  if (!cut) return null;
+  // f = n·p − d < 0 is the negative side.
+  const dir = node.params.sense === "-" ? n.map((x) => -x) : n;
+  const size = Math.hypot(...box.max.map((v, i) => v - box.min[i]));
+  const length = Math.max(1e-6, 0.16 * size);
+  const anchors = [cut.centroid];
+  const poly = cut.polygon;
+  for (let k = 0; k < 4; k++) {
+    const p = poly[Math.floor((k * poly.length) / 4)];
+    anchors.push(cut.centroid.map((v, i) => v + (p[i] - v) * 0.55));
+  }
+  return {
+    plane: { polygon: poly, normal: n, color, tag: node.id },
+    arrows: anchors.map((from) => ({ from, dir, length, color, tag: node.id })),
+  };
+}
+
 function renderViewport(fit) {
   const visibleIds = isolate && selection.length ? selection : scene.roots.filter((n) => n.enabled).map((n) => n.id);
+  // Plane half-spaces shown on their own (top level, isolated or selected) are
+  // drawn as a sheet with arrows instead of half the world box.
+  const asPlane = new Set([...visibleIds, ...selection].filter((id) => isPlaneHalfspace(nodeById.get(id)) && nodeById.get(id).enabled && rootMatrixOf(id)));
   const keep = (p) => showVoid || !p.tag || !isVoidCell(nodeById.get(p.tag) ?? {});
-  const meshes = visibleIds.flatMap((id) => partsOf(id).filter(keep).map((p) => meshOf(p.solid))).filter(Boolean);
+  const meshes = visibleIds.filter((id) => !asPlane.has(id)).flatMap((id) => partsOf(id).filter(keep).map((p) => meshOf(p.solid))).filter(Boolean);
   const mesh = mergeMeshes(meshes);
 
   const hl = highlightedTags();
@@ -359,11 +458,33 @@ function renderViewport(fit) {
   renderLegend(colorCache.keys());
 
   // Ghost the selected nodes that are not directly visible (cutters, void cells, universe content).
-  const ghostIds = isolate || !xray ? [] : selection.filter((id) => !visibleIds.includes(id) || isVoidCell(nodeById.get(id) ?? {}));
+  const ghostIds = isolate || !xray ? [] : selection.filter((id) => !asPlane.has(id) && (!visibleIds.includes(id) || isVoidCell(nodeById.get(id) ?? {})));
+  const planes = [];
+  const arrows = [];
+  for (const id of asPlane) {
+    const node = nodeById.get(id);
+    const color = selection.includes(id) ? HIGHLIGHT : leafColor(id);
+    const g = planeGizmo(node, color);
+    if (g) {
+      planes.push(g.plane);
+      arrows.push(...g.arrows);
+    }
+  }
+  viewer.setGizmos({ planes, arrows });
+  // Fit should frame the sheets too.
+  const sheetPoints = planes.flatMap((p) => p.polygon);
   const ghostMeshes = ghostIds.flatMap((id) => partsOf(id).map((p) => meshOf(p.solid))).filter(Boolean);
   viewer.setGhost(ghostMeshes.length ? mergeMeshes(ghostMeshes) : null);
 
-  sceneBounds = meshBounds(mesh) ?? results.world;
+  sceneBounds = meshBounds(mesh) ?? (sheetPoints.length ? null : results.world);
+  if (sheetPoints.length) {
+    const b = sceneBounds ?? { min: [...sheetPoints[0]], max: [...sheetPoints[0]] };
+    for (const p of sheetPoints) for (let k = 0; k < 3; k++) {
+      b.min[k] = Math.min(b.min[k], p[k]);
+      b.max[k] = Math.max(b.max[k], p[k]);
+    }
+    sceneBounds = b;
+  }
   if (fit) viewer.fit(sceneBounds ?? { min: [-1, -1, -1], max: [1, 1, 1] });
 
   $("stats").textContent = `${mesh.indices.length / 3} tris · ${lastEvalMs.toFixed(1)} ms · ${geo.liveCount} solids`;

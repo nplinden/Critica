@@ -6,6 +6,8 @@
 //   viewer.fit(bounds);
 //   viewer.setUp("z");              // which model axis points up on screen ("y" default)
 //   viewer.setTheme("light");       // background and grid colors: "dark" (default) or "light"
+//   viewer.setGizmos({ planes, arrows });  // plane sheets + 3D arrows (model coordinates):
+//       planes: [{ polygon: [[x,y,z]…], normal, color, tag }], arrows: [{ from, dir, length, color, tag }]
 //   viewer.setClip(planes);         // cutaway: hide the region where n·p > d for every plane
 //                                   // (0–3 planes {n, d}, model coordinates); [] shows everything
 //
@@ -50,6 +52,12 @@ void main() {
     return;
   }
   if (uMode == 3) { outColor = vec4(vColor, 1.0); return; } // unlit lines
+  if (uMode == 4) { // translucent sheets (plane gizmos), lit from both sides
+    vec3 sn = normalize(vNormal);
+    float lit = 0.6 + 0.4 * abs(dot(sn, normalize(vec3(0.4, 0.7, 0.6))));
+    outColor = vec4(vColor * lit, uTint.a);
+    return;
+  }
   vec3 n = normalize(vNormal);
   if (!gl_FrontFacing) n = -n;
   float key = max(dot(n, normalize(vec3(0.4, 0.7, 0.6))), 0.0);
@@ -168,6 +176,11 @@ export function createViewer(canvas, { onPick, theme: initialTheme = "dark", gri
   const solid = makeDrawable(["aPos", "aNormal", "aColor", "aTag"]);
   const ghost = makeDrawable(["aPos", "aNormal"]);
   const lines = makeDrawable(["aPos", "aColor"]);
+  // Gizmos: translucent plane sheets, their outlines, and 3D arrows.
+  const gizmoSheets = makeDrawable(["aPos", "aNormal", "aColor", "aTag"]);
+  const gizmoArrows = makeDrawable(["aPos", "aNormal", "aColor", "aTag"]);
+  const gizmoLines = makeDrawable(["aPos", "aColor"]);
+  let gizmoLineCount = 0;
   let lineCount = 0;
 
   let center = [0, 0, 0];
@@ -301,6 +314,7 @@ export function createViewer(canvas, { onPick, theme: initialTheme = "dark", gri
       gl.drawArrays(gl.LINES, 0, lineCount);
     }
     drawScene(0);
+    drawGizmos(0);
 
     if (ghost.count) {
       // X-ray: no depth test, so hidden operands (e.g. subtracted cutters) show through.
@@ -322,13 +336,102 @@ export function createViewer(canvas, { onPick, theme: initialTheme = "dark", gri
     if (!frame) frame = requestAnimationFrame(draw);
   };
 
+  /** Arrows (opaque, shaded), sheet outlines, then translucent sheets. Mode 1 = picking. */
+  function drawGizmos(mode) {
+    if (!gizmoArrows.count && !gizmoSheets.count) return;
+    gl.useProgram(prog);
+    applyClip();
+    gl.uniformMatrix4fv(u.uModel, false, model);
+    if (gizmoArrows.count) {
+      gl.uniform1i(u.uMode, mode === 1 ? 1 : 0);
+      gl.bindVertexArray(gizmoArrows.vao);
+      gl.drawElements(gl.TRIANGLES, gizmoArrows.count, gl.UNSIGNED_INT, 0);
+    }
+    if (mode === 1) {
+      if (gizmoSheets.count) {
+        gl.bindVertexArray(gizmoSheets.vao);
+        gl.drawElements(gl.TRIANGLES, gizmoSheets.count, gl.UNSIGNED_INT, 0);
+      }
+      gl.bindVertexArray(null);
+      return;
+    }
+    if (gizmoLineCount) {
+      gl.uniform1i(u.uMode, 3);
+      gl.bindVertexArray(gizmoLines.vao);
+      gl.drawArrays(gl.LINES, 0, gizmoLineCount);
+    }
+    if (gizmoSheets.count) {
+      // Occluded by solids, but do not hide what is behind the sheet.
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.depthMask(false);
+      gl.uniform1i(u.uMode, 4);
+      gl.uniform4f(u.uTint, 1, 1, 1, 0.28);
+      gl.bindVertexArray(gizmoSheets.vao);
+      gl.drawElements(gl.TRIANGLES, gizmoSheets.count, gl.UNSIGNED_INT, 0);
+      gl.depthMask(true);
+      gl.disable(gl.BLEND);
+    }
+    gl.bindVertexArray(null);
+  }
+
+  /** Triangle mesh of an arrow: shaft cylinder + cone head, along unit `dir`. */
+  function arrowMesh(from, dir, length, color, tag, out) {
+    const seg = 14;
+    const r = length * 0.045;
+    const head = length * 0.3;
+    const shaftEnd = from.map((v, i) => v + dir[i] * (length - head));
+    const tip = from.map((v, i) => v + dir[i] * length);
+    const helper = Math.abs(dir[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+    const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    const norm = (v) => {
+      const l = Math.hypot(...v);
+      return v.map((x) => x / l);
+    };
+    const u = norm(cross(dir, helper));
+    const w = cross(dir, u);
+    const ring = (c, radius, k) => {
+      const a = (k / seg) * Math.PI * 2;
+      const off = u.map((x, i) => (x * Math.cos(a) + w[i] * Math.sin(a)) * radius);
+      return { p: c.map((v, i) => v + off[i]), n: norm(off) };
+    };
+    const vert = (p, n) => {
+      out.pos.push(...p);
+      out.nrm.push(...n);
+      out.col.push(...color);
+      out.tag.push(tag);
+      return out.pos.length / 3 - 1;
+    };
+    const slope = (2.2 * r) / head; // cone side normals tilt toward the tip
+    for (let k = 0; k < seg; k++) {
+      const a0 = ring(from, r, k);
+      const a1 = ring(from, r, k + 1);
+      const b0 = ring(shaftEnd, r, k);
+      const b1 = ring(shaftEnd, r, k + 1);
+      const i0 = vert(a0.p, a0.n);
+      const i1 = vert(a1.p, a1.n);
+      const i2 = vert(b1.p, b1.n);
+      const i3 = vert(b0.p, b0.n);
+      out.idx.push(i0, i1, i2, i0, i2, i3);
+      // Head: base disk and cone.
+      const h0 = ring(shaftEnd, 2.2 * r, k);
+      const h1 = ring(shaftEnd, 2.2 * r, k + 1);
+      const back = dir.map((x) => -x);
+      const c = vert(shaftEnd, back);
+      out.idx.push(c, vert(h1.p, back), vert(h0.p, back));
+      const n0 = norm(h0.n.map((x, i) => x + dir[i] * slope));
+      const n1 = norm(h1.n.map((x, i) => x + dir[i] * slope));
+      out.idx.push(vert(h0.p, n0), vert(h1.p, n1), vert(tip, norm(n0.map((x, i) => x + n1[i]))));
+    }
+  }
+
   // ---- picking ---------------------------------------------------------------
   let fbo = null;
   let fboSize = [0, 0];
   let colorRb = null;
   let depthRb = null;
   function pick(clientX, clientY) {
-    if (!solid.count) return 0;
+    if (!solid.count && !gizmoSheets.count && !gizmoArrows.count) return 0;
     const [w, h] = resize();
     if (!fbo || fboSize[0] !== w || fboSize[1] !== h) {
       fbo ??= gl.createFramebuffer();
@@ -359,6 +462,7 @@ export function createViewer(canvas, { onPick, theme: initialTheme = "dark", gri
     gl.enable(gl.DEPTH_TEST);
     gl.disable(gl.BLEND);
     drawScene(1);
+    drawGizmos(1);
     const px = new Uint8Array(4);
     gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
     gl.disable(gl.SCISSOR_TEST);
@@ -423,6 +527,34 @@ export function createViewer(canvas, { onPick, theme: initialTheme = "dark", gri
     setGhost(mesh) {
       if (mesh) ghost.upload({ aPos: mesh.positions, aNormal: mesh.normals }, mesh.indices);
       else ghost.count = 0;
+      redraw();
+    },
+    /** Plane sheets (with outlines) and 3D arrows, in model coordinates; tags make them pickable. */
+    setGizmos({ planes = [], arrows = [] } = {}) {
+      const sheet = { pos: [], nrm: [], col: [], tag: [], idx: [] };
+      const outline = { pos: [], col: [] };
+      for (const p of planes) {
+        const base = sheet.pos.length / 3;
+        for (const v of p.polygon) {
+          sheet.pos.push(...v);
+          sheet.nrm.push(...p.normal);
+          sheet.col.push(...p.color);
+          sheet.tag.push(p.tag ?? 0);
+        }
+        for (let k = 1; k + 1 < p.polygon.length; k++) sheet.idx.push(base, base + k, base + k + 1);
+        p.polygon.forEach((v, k) => {
+          outline.pos.push(...v, ...p.polygon[(k + 1) % p.polygon.length]);
+          outline.col.push(...p.color, ...p.color);
+        });
+      }
+      const arrow = { pos: [], nrm: [], col: [], tag: [], idx: [] };
+      for (const a of arrows) arrowMesh(a.from, a.dir, a.length, a.color, a.tag ?? 0, arrow);
+      const upload = (d, m) =>
+        d.upload({ aPos: new Float32Array(m.pos), aNormal: new Float32Array(m.nrm), aColor: new Float32Array(m.col), aTag: new Float32Array(m.tag) }, new Uint32Array(m.idx));
+      upload(gizmoSheets, sheet);
+      upload(gizmoArrows, arrow);
+      gizmoLines.upload({ aPos: new Float32Array(outline.pos), aColor: new Float32Array(outline.col) });
+      gizmoLineCount = outline.pos.length / 3;
       redraw();
     },
     /** Switches background and grid colors ("dark" or "light"). */
