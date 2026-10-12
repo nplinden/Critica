@@ -56,7 +56,7 @@ Requires Rust (the toolchain and `wasm32-unknown-unknown` target are pinned in
 ```sh
 npm run build   # → pkg/critica.wasm
 npm test        # Rust unit tests + JS tests against the built wasm
-npm run demo    # builder at http://localhost:8080/
+npm run demo    # builder at http://localhost:1948/
 ```
 
 ### Builder GUI
@@ -176,8 +176,8 @@ with an unprivileged nginx (`deploy/nginx.conf`: gzip, correct
 
 ```sh
 docker build -t critica .
-docker run -d --name critica -p 8080:8080 --restart unless-stopped critica
-# → http://<server>:8080/
+docker run -d --name critica -p 1948:1948 --restart unless-stopped critica
+# → http://<server>:1948/
 ```
 
 A GitHub Actions workflow (`.github/workflows/docker.yml`) runs the tests and
@@ -185,7 +185,7 @@ publishes a multi-arch image (amd64, arm64) to the GitHub Container Registry
 on every push to `main` (`latest`, `sha-…`) and on `v*` tags (`1.2.3`, `1.2`):
 
 ```sh
-docker run -d --name critica -p 8080:8080 --restart unless-stopped ghcr.io/<owner>/<repo>:latest
+docker run -d --name critica -p 1948:1948 --restart unless-stopped ghcr.io/<owner>/<repo>:latest
 ```
 
 New GHCR packages are private: make the package public in its settings, or
@@ -197,12 +197,12 @@ Or with Compose:
 services:
   critica:
     build: .
-    ports: ["8080:8080"]
+    ports: ["1948:1948"]
     restart: unless-stopped
 ```
 
 For HTTPS, put it behind your reverse proxy (Caddy, Traefik, nginx) and
-forward to port 8080; redirects are relative, so no extra configuration is
+forward to port 1948; redirects are relative, so no extra configuration is
 needed. Everything runs in the visitor's browser: the server stores nothing,
 and scenes stay in each user's browser storage. The pages load the Ubuntu font
 from Google Fonts.
