@@ -1,10 +1,12 @@
-# geomium
+Note that this project is vibecoded.
+
+# Critica
 
 Constructive solid geometry (CSG) in WebAssembly. A dependency-free Rust core
 compiled to a ~65 KB `.wasm`, with a small hand-written ES module wrapper.
 
 ```js
-import { init } from "geomium";
+import { init } from "critica";
 
 const geo = await init();
 
@@ -52,7 +54,7 @@ Requires Rust (the toolchain and `wasm32-unknown-unknown` target are pinned in
 `rust-toolchain.toml`) and Node ≥ 18.
 
 ```sh
-npm run build   # → pkg/geomium.wasm
+npm run build   # → pkg/critica.wasm
 npm test        # Rust unit tests + JS tests against the built wasm
 npm run demo    # builder at http://localhost:8080/
 ```
@@ -173,16 +175,27 @@ with an unprivileged nginx (`deploy/nginx.conf`: gzip, correct
 `application/wasm` type, revalidating caches, `/` → `/examples/`).
 
 ```sh
-docker build -t geomium .
-docker run -d --name geomium -p 8080:8080 --restart unless-stopped geomium
+docker build -t critica .
+docker run -d --name critica -p 8080:8080 --restart unless-stopped critica
 # → http://<server>:8080/
 ```
+
+A GitHub Actions workflow (`.github/workflows/docker.yml`) runs the tests and
+publishes a multi-arch image (amd64, arm64) to the GitHub Container Registry
+on every push to `main` (`latest`, `sha-…`) and on `v*` tags (`1.2.3`, `1.2`):
+
+```sh
+docker run -d --name critica -p 8080:8080 --restart unless-stopped ghcr.io/<owner>/<repo>:latest
+```
+
+New GHCR packages are private: make the package public in its settings, or
+`docker login ghcr.io` on the server with a token that can read packages.
 
 Or with Compose:
 
 ```yaml
 services:
-  geomium:
+  critica:
     build: .
     ports: ["8080:8080"]
     restart: unless-stopped

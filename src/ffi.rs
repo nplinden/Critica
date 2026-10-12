@@ -1,4 +1,4 @@
-//! Raw C-ABI exports consumed by `js/geomium.js`.
+//! Raw C-ABI exports consumed by `pkg/critica.js`.
 //!
 //! Solids live in a handle table inside the module; JavaScript only ever sees
 //! `u32` handles (0 means "invalid / error"). Bulk data crosses the boundary

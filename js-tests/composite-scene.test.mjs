@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { init } from "../pkg/geomium.js";
+import { init } from "../pkg/critica.js";
 import { Scene, Evaluator } from "../examples/scene.js";
 import { COMPOSITE_TYPES } from "../examples/openmc/composite.js";
 import { importOpenMC } from "../examples/openmc/import.js";

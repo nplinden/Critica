@@ -1,7 +1,7 @@
-// geomium — JavaScript bindings for the CSG WebAssembly module.
+// critica — JavaScript bindings for the CSG WebAssembly module.
 //
 // Usage:
-//   import { init } from "geomium";
+//   import { init } from "critica";
 //   const geo = await init();
 //   const part = geo.cube({ radius: 1 }).subtract(geo.sphere({ radius: 1.3 }));
 //   const { positions, normals, indices } = part.toMesh();
@@ -35,20 +35,20 @@ async function loadBytes(source) {
 }
 
 /**
- * Loads the WebAssembly module and returns a {@link Geomium} instance.
+ * Loads the WebAssembly module and returns a {@link Critica} instance.
  * @param {URL|string|Response|BufferSource|WebAssembly.Module} [source]
- *   Where to load `geomium.wasm` from; defaults to the file next to this one.
+ *   Where to load `critica.wasm` from; defaults to the file next to this one.
  */
-export async function init(source = new URL("./geomium.wasm", import.meta.url)) {
+export async function init(source = new URL("./critica.wasm", import.meta.url)) {
   const bytes = await loadBytes(source);
   const { instance } =
     bytes instanceof WebAssembly.Module
       ? { instance: await WebAssembly.instantiate(bytes, {}) }
       : await WebAssembly.instantiate(bytes, {});
-  return new Geomium(instance.exports);
+  return new Critica(instance.exports);
 }
 
-export class Geomium {
+export class Critica {
   #wasm;
   #registry;
 
@@ -60,7 +60,7 @@ export class Geomium {
 
   /** @internal Wraps a raw handle, throwing on failure. */
   _wrap(handle) {
-    if (handle === 0) throw new Error("geomium: operation on a disposed or invalid solid");
+    if (handle === 0) throw new Error("critica: operation on a disposed or invalid solid");
     const solid = new Solid(this, handle);
     this.#registry.register(solid, handle, solid);
     return solid;
@@ -157,7 +157,7 @@ export class Geomium {
 
 function reduce(solids, op) {
   const list = solids.flat();
-  if (list.length === 0) throw new Error(`geomium: ${op} needs at least one solid`);
+  if (list.length === 0) throw new Error(`critica: ${op} needs at least one solid`);
   return list[0][op](...list.slice(1));
 }
 
@@ -173,7 +173,7 @@ export class Solid {
 
   /** @internal */
   get _handle() {
-    if (this.#handle === 0) throw new Error("geomium: solid was disposed");
+    if (this.#handle === 0) throw new Error("critica: solid was disposed");
     return this.#handle;
   }
 
@@ -245,14 +245,14 @@ export class Solid {
   /** Mirrors across the plane through the origin with the given normal axis ("x", "y" or "z"). */
   mirror(axis = "x") {
     const s = { x: [-1, 1, 1], y: [1, -1, 1], z: [1, 1, -1] }[axis];
-    if (!s) throw new TypeError(`geomium: mirror axis must be "x", "y" or "z"`);
+    if (!s) throw new TypeError(`critica: mirror axis must be "x", "y" or "z"`);
     return this.scale(s);
   }
 
   /** Applies a column-major 4x4 matrix (e.g. three.js `Matrix4.elements`). */
   transform(matrix) {
     const m = Float64Array.from(matrix);
-    if (m.length !== 16) throw new TypeError("geomium: transform expects 16 numbers");
+    if (m.length !== 16) throw new TypeError("critica: transform expects 16 numbers");
     return this.#geo._withBuffer(m, (ptr) =>
       this.#geo._wrap(this.#w.geo_transform(this._handle, ptr)),
     );

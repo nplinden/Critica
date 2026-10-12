@@ -1,5 +1,5 @@
-use geomium::primitives::{cuboid, frustum, from_triangles, sphere, torus};
-use geomium::{ffi, to_stl, Mat4, Mesh, Solid, Vec3};
+use critica::primitives::{cuboid, frustum, from_triangles, sphere, torus};
+use critica::{ffi, to_stl, Mat4, Mesh, Solid, Vec3};
 use std::f64::consts::PI;
 
 fn unit_cube() -> Solid {

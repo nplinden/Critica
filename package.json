@@ -1,22 +1,22 @@
 {
-  "name": "geomium",
+  "name": "critica",
   "version": "0.1.0",
   "description": "Constructive solid geometry (CSG) in WebAssembly",
   "type": "module",
   "license": "MIT",
-  "main": "./pkg/geomium.js",
-  "types": "./pkg/geomium.d.ts",
+  "main": "./pkg/critica.js",
+  "types": "./pkg/critica.d.ts",
   "exports": {
     ".": {
-      "types": "./pkg/geomium.d.ts",
-      "default": "./pkg/geomium.js"
+      "types": "./pkg/critica.d.ts",
+      "default": "./pkg/critica.js"
     }
   },
   "files": [
     "pkg/"
   ],
   "scripts": {
-    "build": "cargo build --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/geomium.wasm pkg/",
+    "build": "cargo build --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/critica.wasm pkg/",
     "test": "cargo test --release && npm run build && node --test js-tests/*.test.mjs",
     "demo": "npm run build && node examples/serve.mjs",
     "gen:data": "python3 tools/gen_nuclear_data.py"

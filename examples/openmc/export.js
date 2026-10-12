@@ -58,7 +58,7 @@ function primitiveSurfaces(node) {
       ];
     }
     case "cone":
-      // geomium cones have their base at -h/2 and apex at +h/2.
+      // Builder cones have their base at -h/2 and apex at +h/2.
       return [
         [{ type: "y-cone", coeffs: [0, p.height / 2, 0, (p.radius / p.height) ** 2] }, "-"],
         [{ type: "y-plane", coeffs: [-p.height / 2] }, "+"],

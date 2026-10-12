@@ -707,7 +707,7 @@ const boxKey = (b) => JSON.stringify([b.min, b.max]);
 const flip = (v) => (v.solid ? { ...v, key: `~${v.key}`, inverted: !v.inverted } : v.inverted ? EMPTY : FULL);
 
 /**
- * Evaluates the scene into geomium solids. Every solid is created through a
+ * Evaluates the scene into wasm solids. Every solid is created through a
  * memo keyed by structure (node data, transform, world box), so edits only
  * recompute what changed, undo is free, and universes instantiated with the
  * same local clip box share results. Solids not used in a pass are disposed.
@@ -1166,7 +1166,7 @@ export class Evaluator {
     if (type.endsWith("torus")) {
       const k = axisOf(type);
       const [, , , A, B, C] = c;
-      // geomium tori are Y-axis; an axial scale makes the tube elliptical (B axial, C radial).
+      // Builder tori are Y-axis; an axial scale makes the tube elliptical (B axial, C radial).
       const rot = k === 0 ? M4.rotationAxis(2, -90) : k === 2 ? M4.rotationAxis(0, 90) : M4.IDENTITY;
       const m = M4.compose(M4.translation(c.slice(0, 3)), rot, M4.scaling([1, B / C, 1]));
       return this.#finish(geo.torus({ major: A, minor: C, segments: segs, rings: Math.ceil(segs / 2) }), tag, m);

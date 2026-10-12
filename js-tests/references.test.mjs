@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { init } from "../pkg/geomium.js";
+import { init } from "../pkg/critica.js";
 import { Scene, Evaluator, isCell } from "../examples/scene.js";
 import { exportOpenMC } from "../examples/openmc/export.js";
 import { importOpenMC } from "../examples/openmc/import.js";

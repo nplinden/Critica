@@ -49,7 +49,7 @@ pub fn to_stl(solid: &Solid) -> Vec<u8> {
     let tri_count = solid.triangle_count();
     let mut out = Vec::with_capacity(84 + tri_count * 50);
     let mut header = [0u8; 80];
-    let label = b"geomium binary STL";
+    let label = b"Critica binary STL";
     header[..label.len()].copy_from_slice(label);
     out.extend_from_slice(&header);
     out.extend_from_slice(&(tri_count as u32).to_le_bytes());

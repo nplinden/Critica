@@ -19,9 +19,9 @@ export interface Bounds {
 
 export function init(
   source?: URL | string | Response | BufferSource | WebAssembly.Module,
-): Promise<Geomium>;
+): Promise<Critica>;
 
-export class Geomium {
+export class Critica {
   /** Box. `radius` = half-extents (default 1), or `size` = full extents. */
   cube(opts?: { center?: Vec3Like; radius?: Vec3Like; size?: Vec3Like }): Solid;
   sphere(opts?: { center?: Vec3Like; radius?: number; slices?: number; stacks?: number }): Solid;

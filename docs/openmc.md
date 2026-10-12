@@ -31,7 +31,7 @@ cells become void cells.
 OpenMC's composite surfaces (`openmc.model.CylinderSector`, `HexagonalPrism`,
 `Polygon`, …) exist only in its Python API: each creates several primitive
 surfaces and defines `-composite` as a region over them, and `geometry.xml`
-only ever contains the primitives. In geomium a composite is a parametric
+only ever contains the primitives. In Critica a composite is a parametric
 `composite` node:
 
 ```js
@@ -77,7 +77,7 @@ type.
   `<density value units>`, `<sab name fraction>`, `<isotropic>`,
   `<macroscopic>` and the `cfg`, `temperature`, `volume` and `depletable`
   attributes. OpenMC's C++ reader rejects `<element>`: elements exist only in
-  the Python API, which expands them before writing. geomium does the same on
+  the Python API, which expands them before writing. Critica does the same on
   export.
 - **Expansion** ports `Element.expand` without a `cross_sections.xml`:
   every naturally occurring isotope is used. With a library configured, the

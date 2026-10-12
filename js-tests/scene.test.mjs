@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { init } from "../pkg/geomium.js";
+import { init } from "../pkg/critica.js";
 import { Scene, Evaluator, mergeMeshes, meshBounds } from "../examples/scene.js";
 import { demoScene } from "./fixtures.mjs";
 

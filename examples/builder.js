@@ -2,7 +2,7 @@
 // Scenes can mix builder shapes with OpenMC-style cells, half-spaces and
 // universes, and round-trip through OpenMC geometry/model XML.
 
-import { init } from "../pkg/geomium.js";
+import { init } from "../pkg/critica.js";
 import { h, keepFocus } from "./ui.js";
 import { createViewer } from "./viewer.js";
 import {
@@ -24,7 +24,7 @@ import { exportOpenMC, exportMaterialsXML } from "./openmc/export.js";
 import { createMaterialsWorkspace } from "./materials-ui.js";
 import { COMPOSITE_TYPES } from "./openmc/composite.js";
 
-const STORAGE_KEY = "geomium.builder.scene.v2";
+const STORAGE_KEY = "critica.builder.scene.v2";
 const HISTORY_LIMIT = 200;
 const PALETTE = [
   [0.42, 0.71, 1.0],
@@ -148,7 +148,8 @@ const history = { states: [], index: -1 };
 
 function loadScene() {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem("geomium.builder.scene.v1");
+    // Fall back to keys from before the rename (critica) so saved scenes carry over.
+    const saved = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem("geomium.builder.scene.v2") ?? localStorage.getItem("geomium.builder.scene.v1");
     if (saved) return Scene.fromJSON(JSON.parse(saved));
   } catch {
     // Corrupt or blocked storage: start empty.
@@ -1312,7 +1313,7 @@ $("tree-actions").append(
 );
 
 // The drawer remembers whether it was collapsed.
-const DRAWER_KEY = "geomium.builder.drawer";
+const DRAWER_KEY = "critica.builder.drawer";
 function setDrawer(open) {
   $("drawer").classList.toggle("collapsed", !open);
   $("drawer-toggle").textContent = open ? "‹" : "›";
@@ -1325,7 +1326,7 @@ function setDrawer(open) {
 }
 let drawerOpen = true;
 try {
-  drawerOpen = localStorage.getItem(DRAWER_KEY) !== "closed";
+  drawerOpen = (localStorage.getItem(DRAWER_KEY) ?? localStorage.getItem("geomium.builder.drawer")) !== "closed";
 } catch {
   // Storage unavailable: default to open.
 }
@@ -1416,13 +1417,13 @@ $("tutorial-open").onclick = () => openDialog("tutorial");
 $("shortcuts-open").onclick = () => openDialog("shortcuts");
 
 $("new").onclick = () => replaceScene(new Scene());
-$("save").onclick = () => download("scene.geomium.json", JSON.stringify(scene, null, 2), "application/json");
+$("save").onclick = () => download("scene.critica.json", JSON.stringify(scene, null, 2), "application/json");
 $("export-model").onclick = () => run(exportXML, "model");
 $("export-geometry").onclick = () => run(exportXML, "geometry");
 $("export-materials").onclick = () => run(exportXML, "materials");
 
 // ---- workspaces ----
-const TAB_KEY = "geomium.builder.tab";
+const TAB_KEY = "critica.builder.tab";
 let activeTab = "geometry";
 const materialsUI = createMaterialsWorkspace({
   scene: () => scene,
@@ -1770,7 +1771,7 @@ function renderTutorial() {
   const b = (t) => h("b", {}, t);
   const k = (t) => h("kbd", {}, t);
   $("tutorial-body").replaceChildren(
-    h("p", {}, "geomium builds solids with constructive solid geometry (CSG) and reads and writes OpenMC geometry."),
+    h("p", {}, "Critica builds solids with constructive solid geometry (CSG) and reads and writes OpenMC geometry."),
     h("h3", {}, "1 · Add shapes"),
     h(
       "ul",
@@ -1830,7 +1831,7 @@ function renderTutorial() {
 commit();
 refresh({ fit: true });
 try {
-  if (localStorage.getItem(TAB_KEY) === "materials") setTab("materials");
+  if ((localStorage.getItem(TAB_KEY) ?? localStorage.getItem("geomium.builder.tab")) === "materials") setTab("materials");
 } catch {
   // Storage unavailable: start on Geometry.
 }

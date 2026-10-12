@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { init } from "../pkg/geomium.js";
+import { init } from "../pkg/critica.js";
 import { Scene, Evaluator, isCell } from "../examples/scene.js";
 import { demoScene } from "./fixtures.mjs";
 import { importOpenMC } from "../examples/openmc/import.js";

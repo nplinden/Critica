@@ -1,5 +1,5 @@
 // Minimal static server for the playground: serves the repo root so the
-// page can import ../pkg/geomium.js. Usage: node examples/serve.mjs [port]
+// page can import ../pkg/critica.js. Usage: node examples/serve.mjs [port]
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
@@ -28,4 +28,4 @@ createServer(async (req, res) => {
   } catch {
     res.writeHead(404).end("not found");
   }
-}).listen(port, "127.0.0.1", () => console.log(`geomium playground: http://localhost:${port}/`));
+}).listen(port, "127.0.0.1", () => console.log(`Critica: http://localhost:${port}/`));

@@ -1,4 +1,4 @@
-//! geomium — constructive solid geometry compiled to WebAssembly.
+//! Critica — constructive solid geometry compiled to WebAssembly.
 //!
 //! The Rust API ([`Solid`], [`primitives`], [`Mesh`]) is usable natively; the
 //! `ffi` module exposes it to JavaScript as a handle-based C ABI with no

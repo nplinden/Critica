@@ -205,7 +205,7 @@ const quadricParts = ([A, B, C, D, E, F, G, H, J, K]) => ({
 });
 
 /**
- * Classifies a general quadric into a shape geomium can mesh:
+ * Classifies a general quadric into a shape Critica can mesh:
  *  - ellipsoid: { center, basis (rows = world axes, cols = principal axes), semi[3] }
  *  - cylinder:  elliptic cylinder along principal axis `axis`, semi[] for the other two
  *  - cone:      elliptic double cone with apex `center` along `axis`, slopes in semi[]

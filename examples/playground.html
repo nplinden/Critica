@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Geomium Playground</title>
+<title>Critica Playground</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&display=swap">
@@ -32,7 +32,7 @@
 <main>
   <aside>
     <header>
-      <h1>geomium <a href="index.html">builder</a></h1>
+      <h1>Critica <a href="index.html">builder</a></h1>
       <select id="examples"></select>
       <button id="stl">STL</button>
       <button id="run" class="primary" title="Ctrl+Enter">Run</button>
@@ -46,7 +46,7 @@
   </div>
 </main>
 <script type="module">
-import { init } from "../pkg/geomium.js";
+import { init } from "../pkg/critica.js";
 import { createViewer } from "./viewer.js";
 
 const EXAMPLES = {
@@ -123,7 +123,7 @@ code.addEventListener("keydown", (e) => {
 $("stl").onclick = () => {
   if (!current) return;
   const url = URL.createObjectURL(new Blob([current.toSTL()], { type: "model/stl" }));
-  Object.assign(document.createElement("a"), { href: url, download: "geomium.stl" }).click();
+  Object.assign(document.createElement("a"), { href: url, download: "critica.stl" }).click();
   URL.revokeObjectURL(url);
 };
 
