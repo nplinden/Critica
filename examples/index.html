@@ -196,6 +196,7 @@
   .drawer-section { display: grid; grid-template-columns: 1fr; gap: 2px; }
   .drawer-section + .drawer-section { padding-top: 8px; border-top: 1px solid var(--line); }
   .drawer-section .tb { justify-content: flex-start; padding: 4px 8px 4px 6px; }
+  .drawer-title { font-size: 10px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 0 6px 2px; }
   .drawer { z-index: 2; }
   .drawer-menu { position: absolute; left: calc(100% + 6px); top: 28px; display: flex; flex-direction: column; gap: 1px; padding: 6px; min-width: 210px; background: var(--overlay); border: 1px solid var(--line-2); border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35); }
   .drawer-menu[hidden] { display: none; }
@@ -263,7 +264,7 @@
     #view { order: 1; }
     #props { order: 3; border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
     body { height: auto; }
-    .drawer-section .label { display: none; }
+    .drawer-section .label, .drawer-title { display: none; }
   }
 </style>
 </head>
@@ -335,7 +336,8 @@
     <div class="drawer" id="drawer">
       <button class="drawer-handle" id="drawer-toggle" title="Show or hide the tools" aria-expanded="true">‹</button>
       <div class="drawer-body">
-        <div class="drawer-section" id="primitives" aria-label="Add shapes"></div>
+        <div class="drawer-section" id="primitives" aria-label="Finite shapes"><div class="drawer-title">Shapes</div></div>
+        <div class="drawer-section" id="surfaces" aria-label="Surfaces"><div class="drawer-title">Surfaces</div></div>
         <div class="drawer-section" id="composites" aria-label="Composite surfaces"></div>
         <div class="drawer-section" id="operations" aria-label="Combine selection"></div>
       </div>

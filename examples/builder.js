@@ -63,6 +63,9 @@ const ICONS = {
   duplicate: '<rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 3v-.5a1 1 0 0 0-1-1H2.5a1 1 0 0 0-1 1V10a1 1 0 0 0 1 1H3"/>',
   composite: '<path d="M2 14V6l4-3 4 3v8z" fill="currentColor" fill-opacity=".3"/><path d="M2 14V6l4-3 4 3v8M10 9h4v5h-4"/><circle cx="12" cy="5" r="2.2"/>',
   expand: '<path d="M2 8h12M8 2v12" stroke-dasharray="1.6 1.4"/><rect x="2" y="2" width="12" height="12" rx="1.5"/>',
+  plane: '<path d="M4.5 4h10l-3 8h-10z" fill="currentColor" fill-opacity=".3"/>',
+  infcylinder: '<path d="M4 1.5v13M12 1.5v13"/><ellipse cx="8" cy="8" rx="4" ry="1.6"/><path d="M4 1.5h8M4 14.5h8" stroke-dasharray="1.2 1.4" stroke-opacity=".6"/>',
+  infcone: '<path d="M3 1.5l10 13M13 1.5l-10 13"/><ellipse cx="8" cy="2" rx="5" ry="1.1" stroke-opacity=".5"/><ellipse cx="8" cy="14" rx="5" ry="1.1" stroke-opacity=".5"/>',
   ref: '<path d="M6.3 9.7l3.4-3.4"/><path d="M7.2 4.6l1.1-1.1a2.7 2.7 0 0 1 3.8 3.8l-1.1 1.1"/><path d="M8.8 11.4l-1.1 1.1a2.7 2.7 0 0 1-3.8-3.8l1.1-1.1"/>',
 };
 
@@ -1108,8 +1111,9 @@ function expandComposite() {
   select([top.id]);
 }
 
-function addHalfspace() {
-  const node = scene.addHalfspace("z-plane", [0], "-", insertionTarget({ kind: "halfspace" }));
+/** Adds the inside (negative) half-space of a new OpenMC surface with default coefficients. */
+function addSurface(type) {
+  const node = scene.addHalfspace(type, undefined, "-", insertionTarget({ kind: "halfspace" }));
   commit();
   select([node.id]);
 }
@@ -1259,19 +1263,114 @@ async function openFile(file) {
 
 // ---- toolbar -----------------------------------------------------------------
 
-for (const [kind, def] of Object.entries(PRIMITIVES)) {
+// ---- tool drawer ----
+// Flyouts: a drawer button that opens a menu of choices to the right of the drawer.
+const flyouts = [];
+
+function flyoutButton({ id, iconName, label, title, heading, items }) {
+  const menu = h(
+    "div",
+    { class: "drawer-menu", role: "menu", hidden: true },
+    heading && h("div", { class: "drawer-menu-title" }, heading),
+    items.map((item) =>
+      h(
+        "button",
+        {
+          class: "tb",
+          role: "menuitem",
+          title: item.title ?? "",
+          onclick: () => {
+            menu.hidden = true;
+            run(item.run);
+          },
+        },
+        item.label,
+      ),
+    ),
+  );
+  const button = h(
+    "button",
+    {
+      class: "tb",
+      id,
+      title,
+      "aria-haspopup": "menu",
+      onclick: (e) => {
+        e.stopPropagation();
+        const open = menu.hidden;
+        for (const f of flyouts) f.menu.hidden = true;
+        if (open) {
+          // Align the menu with its button.
+          menu.style.top = `${button.getBoundingClientRect().top - $("drawer").getBoundingClientRect().top}px`;
+          menu.hidden = false;
+        }
+      },
+    },
+    icon(iconName),
+    h("span", { class: "label" }, `${label} ▸`),
+  );
+  flyouts.push({ button, menu });
+  $("drawer").append(menu);
+  return button;
+}
+
+document.addEventListener("click", (e) => {
+  for (const f of flyouts) if (!f.menu.hidden && !f.menu.contains(e.target)) f.menu.hidden = true;
+});
+
+// Finite shapes (builder primitives that export as several surfaces).
+for (const kind of ["cube", "cylinder", "cone"]) {
+  const def = PRIMITIVES[kind];
   $("primitives").append(
     h(
       "button",
-      { class: "tb", title: `Add ${def.label.toLowerCase()} (inside the selected operation or cell, if any)`, onclick: () => run(addPrimitive, kind) },
+      { class: "tb", title: `Add a finite ${def.label.toLowerCase()} (inside the selected operation or cell, if any)`, onclick: () => run(addPrimitive, kind) },
       icon(kind),
       h("span", { class: "label" }, def.label),
     ),
   );
 }
-$("primitives").append(
-  h("button", { class: "tb", title: "Add a half-space on a new surface (OpenMC style)", onclick: () => run(addHalfspace) }, icon("halfspace"), h("span", { class: "label" }, "Half-space")),
+
+// OpenMC surfaces: each adds the inside (negative) half-space of a new surface.
+const AXES_XYZ = ["x", "y", "z"];
+const surfaceItems = (family, noun) =>
+  AXES_XYZ.map((a) => ({ label: `${a.toUpperCase()} ${noun}`, title: `${a}-${family}`, run: () => addSurface(`${a}-${family}`) }));
+$("surfaces").append(
+  flyoutButton({
+    id: "surface-plane",
+    iconName: "plane",
+    label: "Plane",
+    heading: "Plane",
+    title: "Add a plane half-space (x/y/z-plane or an arbitrary plane)",
+    items: [...surfaceItems("plane", "plane"), { label: "Arbitrary plane", title: "plane: Ax + By + Cz = D", run: () => addSurface("plane") }],
+  }),
+  flyoutButton({
+    id: "surface-cylinder",
+    iconName: "infcylinder",
+    label: "Cylinder",
+    heading: "Infinite cylinder",
+    title: "Add the inside of an infinite cylinder along X, Y or Z",
+    items: surfaceItems("cylinder", "cylinder"),
+  }),
+  flyoutButton({
+    id: "surface-cone",
+    iconName: "infcone",
+    label: "Cone",
+    heading: "Infinite cone",
+    title: "Add the inside of an infinite double cone along X, Y or Z",
+    items: surfaceItems("cone", "cone"),
+  }),
+  h("button", { class: "tb", id: "surface-sphere", title: "Add the inside of a sphere surface", onclick: () => run(addSurface, "sphere") }, icon("sphere"), h("span", { class: "label" }, "Sphere")),
+  flyoutButton({
+    id: "surface-torus",
+    iconName: "torus",
+    label: "Torus",
+    heading: "Torus",
+    title: "Add the inside of a torus around X, Y or Z",
+    items: surfaceItems("torus", "torus"),
+  }),
 );
+
 const OP_KEYS = { union: "U", subtract: "S", intersect: "N", complement: "C" };
 for (const [kind, def] of Object.entries(OPERATIONS)) {
   $("operations").append(
@@ -1293,47 +1392,18 @@ $("operations").append(
   h("button", { class: "tb", id: "duplicate", title: "Duplicate the selection (Ctrl+D)", onclick: () => run(duplicateSelection) }, icon("duplicate"), h("span", { class: "label" }, "Duplicate")),
   h("button", { class: "tb", id: "reference", title: "Reuse the selected regions elsewhere: adds live references (R)", onclick: () => run(addReferences) }, icon("ref"), h("span", { class: "label" }, "Reference")),
 );
-// Composite surfaces: one drawer button opens a menu of OpenMC composite types.
-const compositeMenu = h(
-  "div",
-  { class: "drawer-menu", id: "composite-menu", role: "menu", hidden: true },
-  h("div", { class: "drawer-menu-title" }, "Composite surfaces"),
-  Object.entries(COMPOSITE_TYPES).map(([type, def]) =>
-    h(
-      "button",
-      {
-        class: "tb",
-        role: "menuitem",
-        title: `${def.description} (openmc.model.${def.openmc})`,
-        onclick: () => {
-          compositeMenu.hidden = true;
-          run(addComposite, type);
-        },
-      },
-      def.label,
-    ),
-  ),
-);
+// Composite surfaces (openmc.model.*): several surfaces combined into one region.
 $("composites").append(
-  h(
-    "button",
-    {
-      class: "tb",
-      id: "composite-toggle",
-      title: "Add an OpenMC composite surface (cylinder sector, hexagonal prism, polygon, …)",
-      onclick: (e) => {
-        e.stopPropagation();
-        compositeMenu.hidden = !compositeMenu.hidden;
-      },
-    },
-    icon("composite"),
-    h("span", { class: "label" }, "Composite ▸"),
-  ),
+  flyoutButton({
+    id: "composite-toggle",
+    iconName: "composite",
+    label: "Composite",
+    heading: "Composite surfaces",
+    title: "Add an OpenMC composite surface (cylinder sector, hexagonal prism, polygon, …)",
+    items: Object.entries(COMPOSITE_TYPES).map(([type, def]) => ({ label: def.label, title: `${def.description} (openmc.model.${def.openmc})`, run: () => addComposite(type) })),
+  }),
 );
-$("drawer").append(compositeMenu);
-document.addEventListener("click", (e) => {
-  if (!compositeMenu.hidden && !compositeMenu.contains(e.target)) compositeMenu.hidden = true;
-});
+
 
 $("tree-actions").append(
   h("button", { class: "tb", id: "make-cell", title: "Wrap the selected shapes into OpenMC cells", onclick: () => run(makeCells) }, icon("cell"), "Cell"),
@@ -1804,7 +1874,7 @@ function renderTutorial() {
     h(
       "ul",
       {},
-      h("li", {}, "Use the ", b("tool drawer"), " on the canvas to add a cube, sphere, cylinder, cone, torus or an OpenMC ", b("half-space"), "."),
+      h("li", {}, "Use the ", b("tool drawer"), " on the canvas: ", b("Shapes"), " are finite (cube, cylinder, cone); ", b("Surfaces"), " add the inside of one OpenMC surface: planes (X, Y, Z or arbitrary), infinite cylinders and cones, spheres and tori."),
       h("li", {}, b("Composite ▸"), " adds OpenMC composite surfaces: hexagonal prisms, cylinder sectors, polygons, vessels and more."),
       h("li", {}, "With one operation, cell or universe selected, new shapes go inside it."),
       h("li", {}, "Edit sizes, surface coefficients and position/rotation/scale in the ", b("Properties"), " panel on the right."),

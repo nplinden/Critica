@@ -63,10 +63,13 @@ npm run demo    # builder at http://localhost:1948/
 
 `examples/index.html` is a point-and-click modeller:
 
-- **Tool drawer** (floating over the canvas, collapsible): add shapes
-  (Cube, Sphere, Cylinder, Cone, Torus, Half-space) and combine the selection
-  with Union, Subtract, Intersect or Complement; Ungroup and Duplicate. When
-  one operation, cell or universe is selected, new shapes go inside it.
+- **Tool drawer** (floating over the canvas, collapsible): *Shapes* adds
+  finite cubes, cylinders and cones; *Surfaces* adds the inside of one OpenMC
+  surface: *Plane ▸* (X, Y, Z or arbitrary), infinite *Cylinder ▸* and
+  *Cone ▸* (X, Y, Z), *Sphere*, *Torus ▸* (X, Y, Z); *Composite ▸* adds OpenMC
+  composite surfaces; then Union, Subtract, Intersect, Complement, Ungroup,
+  Duplicate and Reference. When one operation, cell or universe is selected,
+  new nodes go inside it.
 - **Top bar**: a *File* menu (New, Open… <kbd>Ctrl+O</kbd>, Save
   <kbd>Ctrl+S</kbd>, Export as → OpenMC XML…), *Settings* (light/dark theme or follow the OS,
   world box, curved-surface tessellation, up axis), and *Help* (Tutorial…, Keyboard shortcuts…
