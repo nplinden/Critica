@@ -1290,12 +1290,56 @@ const setPath = (node, path, value) => {
   o[k] = value;
 };
 
+// ---- editing several nodes at once ----
+// With several nodes selected, a property edit applies to every selected node
+// of the primary's kind (and composite type): select three spheres, set the
+// radius, and all three change. Names and OpenMC ids stay per node.
+
+const PER_NODE_PATHS = new Set(["name", "openmc.id"]);
+const sameKind = (a, b) => a.kind === b.kind && (a.kind !== "composite" || a.params.type === b.params.type);
+
+/** The nodes an edit of `path` applies to (the primary first). */
+function editTargets(path) {
+  const p = primary();
+  if (!p || PER_NODE_PATHS.has(path) || path.startsWith("world.")) return [targetNode()];
+  let nodes = selection.map((id) => scene.find(id)?.node).filter((n) => n && sameKind(n, p));
+  // Surface fields only make sense across surfaces of the same type.
+  if (path.startsWith("surface.") && path !== "surface.type") {
+    const type = scene.surfaces.get(p.params.surface)?.type;
+    nodes = nodes.filter((n) => scene.surfaces.get(n.params.surface)?.type === type);
+  }
+  return [p, ...nodes.filter((n) => n !== p)];
+}
+
+/** Reads a data-path without creating anything (unlike resolvePath). */
+function peekPath(node, path) {
+  let keys = path.split(".");
+  let obj = node;
+  if (keys[0] === "surface") {
+    obj = scene.surfaces.get(node.params?.surface);
+    keys = keys.slice(1);
+  }
+  for (const k of keys) obj = obj?.[k];
+  return obj;
+}
+
+/** True when the nodes an edit of `path` would reach do not all share one value. */
+function isMixed(path) {
+  const nodes = editTargets(path);
+  if (nodes.length < 2) return false;
+  const first = JSON.stringify(peekPath(nodes[0], path));
+  return nodes.some((n) => JSON.stringify(peekPath(n, path)) !== first);
+}
+
 function numberInput(node, path, { step = 0.1, min, integer = false, disabled = false, value } = {}) {
+  const mixed = value === undefined && node === primary() && isMixed(path);
   return h("input", {
     type: "number",
     step: String(step),
     min: min == null ? null : String(min),
-    value: String(value ?? getPath(node, path) ?? ""),
+    value: mixed ? "" : String(value ?? getPath(node, path) ?? ""),
+    placeholder: mixed ? "mixed" : null,
+    title: mixed ? "Differs between the selected nodes; a new value applies to all of them" : null,
     disabled,
     dataset: { path, integer: integer ? "1" : "", min: min == null ? "" : String(min) },
   });
@@ -1310,10 +1354,12 @@ function vecField(label, node, path, opts) {
 }
 
 function select_(path, options, value) {
+  const mixed = Boolean(primary()) && isMixed(path);
   return h(
     "select",
     { dataset: { path } },
-    options.map(([v, label]) => h("option", { value: String(v), selected: String(v) === String(value) }, label)),
+    mixed && h("option", { value: "", selected: true, disabled: true }, "— mixed —"),
+    options.map(([v, label]) => h("option", { value: String(v), selected: !mixed && String(v) === String(value) }, label)),
   );
 }
 
@@ -1431,6 +1477,18 @@ function renderPropsBody() {
   const sections = [
     h("h2", {}, OPERATIONS[node.kind]?.label ?? PRIMITIVES[node.kind]?.label ?? { halfspace: "Half-space", cell: "Cell", universe: "Universe", composite: "Composite surface", ref: "Reference" }[node.kind], selection.length > 1 ? h("span", {}, `${selection.length} selected`) : null),
   ];
+  const editing = editTargets("params").length;
+  if (selection.length > 1) {
+    const others = selection.length - editing;
+    sections.push(
+      h(
+        "div",
+        { class: "multi-note" },
+        editing > 1 ? `Editing ${editing} nodes of this type: changes apply to all of them (names stay individual).` : "Changes apply to this node only.",
+        others > 0 ? ` ${others} other selected node${others > 1 ? "s are" : " is"} of another type and left unchanged.` : "",
+      ),
+    );
+  }
   const basics = node.kind === "ref" ? [] : [field("Name", h("input", { type: "text", value: node.name, dataset: { path: "name" } }))];
   if (isOperation(node)) {
     basics.push(field("Type", select_("kind", Object.entries(OPERATIONS).map(([k, d]) => [k, `${d.symbol}  ${d.label}`]), node.kind)));
@@ -1796,7 +1854,7 @@ function onFormInput(e) {
   const value = readInput(e.target);
   if (value === undefined) return;
   if (path === "world.auto") return; // handled on change
-  setPath(targetNode(), path, value);
+  for (const node of editTargets(path)) setPath(node, path, value);
   if (path.startsWith("world.")) scene.world.auto = path === "world.segments" || path === "world.up" ? scene.world.auto : false;
   schedule();
 }
@@ -1805,7 +1863,7 @@ function onFormChange(e) {
   const path = e.target.dataset?.path;
   if (!path) return;
   const node = targetNode();
-  if (e.target.tagName === "SELECT") onSelectChange(node, path, e.target.value);
+  if (e.target.tagName === "SELECT") for (const n of editTargets(path)) onSelectChange(n, path, e.target.value);
   else if (path === "world.auto") {
     scene.world.auto = e.target.checked;
     if (!scene.world.auto && results.world) {
@@ -1813,9 +1871,11 @@ function onFormChange(e) {
       scene.world.max = [...results.world.max];
     }
   } else if (path === "surface.name") {
-    const sf = scene.surfaces.get(node.params?.surface);
-    if (sf && !sf.name) delete sf.name;
-    if (sf) syncHalfspaceNames(sf.id);
+    for (const n of editTargets(path)) {
+      const sf = scene.surfaces.get(n.params?.surface);
+      if (sf && !sf.name) delete sf.name;
+      if (sf) syncHalfspaceNames(sf.id);
+    }
   } else if (e.target.type === "number") {
     // Reflect clamping (e.g. slices < 3) back into the field.
     const v = getPath(node, path);
@@ -1826,7 +1886,7 @@ function onFormChange(e) {
   // Rebuilding the form right now would replace that field and drop the
   // focus, so wait until the focus has landed, then rebuild around it.
   const fromSettings = path.startsWith("world.");
-  const rebuildProps = e.target.tagName === "SELECT" || path === "color";
+  const rebuildProps = e.target.tagName === "SELECT" || path === "color" || editTargets(path).length > 1;
   setTimeout(() => {
     if (fromSettings) {
       refresh({ props: false });
@@ -1872,9 +1932,8 @@ function onSelectChange(node, path, value) {
 }
 
 function resetTransform() {
-  const node = primary();
-  if (!node) return;
-  node.transform = { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], ...(isCell(node) ? { order: "zyx" } : {}) };
+  if (!primary()) return;
+  for (const node of editTargets("transform")) node.transform = { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], ...(isCell(node) ? { order: "zyx" } : {}) };
   commit();
   refresh();
 }

@@ -120,7 +120,10 @@ npm run demo    # builder at http://localhost:1948/
   Rename, Duplicate and Delete.
 - **Properties**: shape parameters and position, rotation and scale for any
   node, plus the triangle count, volume and size of the selected node's
-  result.
+  result. With several nodes selected (Ctrl-click), edits apply to every
+  selected node of the same type as the last one clicked (same composite type
+  for composites): select three spheres and set the radius to change all three.
+  Fields whose values differ show *mixed*; names and OpenMC ids stay per node.
 - **Viewport**: click a face to select the whole region it belongs to (the
   top-level item or cell); click again inside the selection to step one level
   down toward the shape or half-space that produced the face, or Alt-click to
