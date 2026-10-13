@@ -43,7 +43,8 @@
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 var(--font-ui); }
-  body { display: grid; grid-template-rows: auto 1fr; }
+  body { display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
+  body > header { grid-row: 1; } body > .ribbon { grid-row: 2; } body > main { grid-row: 3; }
   button, select, input { font: inherit; color: inherit; }
   svg.icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; }
 
@@ -129,12 +130,36 @@
   .submenu-list { top: -5px; left: calc(100% + 2px); }
   .chevron { color: var(--muted); font-size: 10px; }
 
-  /* ---- workspace tabs ---- */
-  .tabs { display: flex; gap: 2px; margin-left: 18px; padding: 2px; background: var(--bg); border: 1px solid var(--line); border-radius: 7px; }
-  .tab { background: none; border: 0; border-radius: 5px; padding: 3px 14px; cursor: pointer; color: var(--muted); }
+  /* ---- ribbon: one tab per workspace, its tools grouped below ---- */
+  .toolbar { padding-bottom: 0; border-bottom: 0; align-items: flex-end; }
+  .toolbar h1, .toolbar .menubar { align-self: center; margin-bottom: 4px; }
+  .tabs { display: flex; gap: 2px; margin-left: 18px; align-self: flex-end; }
+  .tab { background: none; border: 1px solid transparent; border-bottom: 0; border-radius: 6px 6px 0 0; padding: 5px 16px 6px; cursor: pointer; color: var(--muted); position: relative; top: 1px; }
   .tab:hover { color: var(--text); }
-  .tab.on { background: var(--panel-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line-2); }
+  .tab.on { background: var(--bg); color: var(--text); border-color: var(--line); font-weight: 500; }
+  .tab.on::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 0; height: 2px; border-radius: 1px; background: var(--accent); }
+  .ribbon-toggle { align-self: center; margin-bottom: 4px; color: var(--muted); }
   main[hidden] { display: none; }
+  .ribbon { display: flex; background: var(--bg); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: visible; }
+  .ribbon.collapsed { display: none; }
+  .ribbon-panel { display: flex; align-items: stretch; padding: 4px 6px 0; height: 96px; } /* same for every tab: switching does not shift the workspace */
+  .ribbon-panel[hidden] { display: none; }
+  .rgroup { display: flex; flex-direction: column; padding: 0 6px; border-right: 1px solid var(--line); }
+  .rgroup:last-child { border-right: 0; }
+  .rgroup-body { flex: 1; display: flex; align-items: flex-start; gap: 2px; }
+  .rgroup-label { text-align: center; font-size: 10.5px; color: var(--muted); padding: 2px 0 4px; white-space: nowrap; }
+  /* Large buttons: icon above label. */
+  .rgroup-body.big .tb, .tb.big { flex-direction: column; justify-content: flex-start; gap: 3px; min-width: 54px; padding: 5px 6px 4px; font-size: 12px; }
+  .rgroup-body.big .tb svg.icon, .tb.big svg.icon { width: 22px; height: 22px; stroke-width: 1.1; }
+  /* Small buttons: stacked in columns of three. */
+  .rstack { display: grid; grid-auto-flow: column; grid-template-rows: repeat(3, auto); gap: 1px 2px; align-content: start; }
+  .rstack .tb { padding: 2px 8px 2px 5px; font-size: 12px; justify-content: flex-start; }
+  .rstack .tb svg.icon { width: 14px; height: 14px; }
+  .rdrop { position: relative; }
+  .ribbon-menu { position: fixed; z-index: 30; display: flex; flex-direction: column; gap: 1px; padding: 6px; min-width: 210px; background: var(--panel); border: 1px solid var(--line-2); border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35); }
+  .ribbon-menu[hidden] { display: none; }
+  .ribbon-menu .tb { justify-content: flex-start; }
+  .ribbon-menu-title { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 2px 8px 6px; }
 
   /* ---- materials workspace ---- */
   .materials-main { display: grid; grid-template-columns: 280px minmax(420px, 1fr) 360px; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
@@ -198,30 +223,13 @@
   .dialog-head h2 { font-size: 14px; font-weight: 500; margin: 0; }
   #settings-body .section { border-bottom: 0; padding-bottom: 14px; }
 
-  /* ---- tool drawer over the canvas ---- */
-  .drawer { position: absolute; top: 10px; left: 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; max-height: calc(100% - 50px); }
-  .drawer-body { display: flex; flex-direction: column; gap: 8px; padding: 6px; background: var(--overlay); border: 1px solid var(--line); border-radius: 8px; overflow-y: auto; }
-  .drawer.collapsed .drawer-body { display: none; }
-  .drawer-handle { width: 26px; height: 22px; border-radius: 5px; border: 1px solid var(--line); background: var(--overlay); color: var(--muted); cursor: pointer; line-height: 1; }
-  .drawer-handle:hover { color: var(--text); }
-  .drawer-section { display: grid; grid-template-columns: 1fr; gap: 2px; }
-  .drawer-section + .drawer-section { padding-top: 8px; border-top: 1px solid var(--line); }
-  .drawer-section .tb { justify-content: flex-start; padding: 4px 8px 4px 6px; }
-  .drawer-title { font-size: 10px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 0 6px 2px; }
-  .drawer { z-index: 2; }
-  .drawer-menu { position: absolute; left: calc(100% + 6px); top: 28px; display: flex; flex-direction: column; gap: 1px; padding: 6px; min-width: 210px; background: var(--overlay); border: 1px solid var(--line-2); border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35); }
-  .drawer-menu[hidden] { display: none; }
-  .drawer-menu .tb { justify-content: flex-start; }
-  .drawer-menu-title { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 2px 8px 6px; }
+  /* ---- viewport overlays ---- */
   .panel-actions { display: flex; gap: 2px; text-transform: none; letter-spacing: 0; font-weight: 400; }
   .panel-actions .tb { padding: 2px 6px; font-size: 12px; color: var(--text); }
   /* Three creation buttons do not fit beside the title: give them their own row. */
   #tree-head { flex-wrap: wrap; row-gap: 4px; }
   #tree-head .panel-actions { flex: 1 0 100%; margin-left: -6px; }
-  .overlay { position: absolute; display: flex; gap: 6px; align-items: center; }
-  .overlay.tr { top: 10px; right: 10px; }
-  .overlay.tr .tb { background: var(--overlay); border-color: var(--line); }
-  .cutaway-panel { position: absolute; top: 46px; right: 10px; z-index: 3; width: 290px; padding: 8px 10px 10px; background: var(--overlay); border: 1px solid var(--line-2); border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35); }
+  .cutaway-panel { position: absolute; top: 10px; right: 10px; z-index: 3; width: 290px; padding: 8px 10px 10px; background: var(--overlay); border: 1px solid var(--line-2); border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35); }
   .cutaway-panel[hidden] { display: none; }
   .cut-title { font-size: 10.5px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
   .segmented { display: flex; gap: 0; border: 1px solid var(--line-2); border-radius: 5px; overflow: hidden; }
@@ -278,7 +286,6 @@
     #view { order: 1; }
     #props { order: 3; border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
     body { height: auto; }
-    .drawer-section .label, .drawer-title { display: none; }
   }
 </style>
 </head>
@@ -313,11 +320,42 @@
     </div>
   </nav>
   <div class="tabs" role="tablist" aria-label="Workspace">
-    <button class="tab on" role="tab" id="tab-geometry" aria-selected="true" aria-controls="ws-geometry">Geometry</button>
-    <button class="tab" role="tab" id="tab-materials" aria-selected="false" aria-controls="ws-materials">Materials</button>
+    <button class="tab on" role="tab" id="tab-geometry" aria-selected="true" aria-controls="ribbon-geometry">Geometry</button>
+    <button class="tab" role="tab" id="tab-materials" aria-selected="false" aria-controls="ribbon-materials">Materials</button>
   </div>
+  <span class="spacer"></span>
+  <button class="tb ribbon-toggle" id="ribbon-toggle" title="Collapse the ribbon" aria-expanded="true">▴</button>
   <input type="file" id="file" accept=".json,.xml,.dat,application/json,application/xml" hidden>
 </header>
+<div class="ribbon" id="ribbon">
+  <div class="ribbon-panel" id="ribbon-geometry" role="tabpanel" aria-labelledby="tab-geometry">
+    <div class="rgroup"><div class="rgroup-body big" id="primitives" aria-label="Finite shapes"></div><div class="rgroup-label">Shapes</div></div>
+    <div class="rgroup"><div class="rgroup-body big" id="surfaces" aria-label="Surfaces"></div><div class="rgroup-label">Surfaces</div></div>
+    <div class="rgroup"><div class="rgroup-body big" id="composites" aria-label="Composite surfaces"></div><div class="rgroup-label">Composite</div></div>
+    <div class="rgroup">
+      <div class="rgroup-body"><div class="rgroup-body big" id="operations" aria-label="Combine selection"></div><div class="rstack" id="operations-more"></div></div>
+      <div class="rgroup-label">Combine</div>
+    </div>
+    <div class="rgroup">
+      <div class="rgroup-body">
+        <button class="tb big" id="cutaway-toggle" title="Cutaway: section plane, quarter or eighth cut (K)"></button>
+        <div class="rstack">
+          <button class="tb" id="color-material" title="Color by material, with a legend (M)">By material</button>
+          <button class="tb" id="void" title="Show void cells (V)">Void</button>
+          <button class="tb" id="world-box" title="Show the world box as a wireframe (W)">World box</button>
+          <button class="tb" id="isolate" title="Show only the selected nodes (I)">Isolate</button>
+          <button class="tb" id="xray" title="Show hidden selected nodes as an x-ray ghost (X)">X-ray</button>
+        </div>
+        <button class="tb big" id="fit" title="Frame the visible geometry (F)"></button>
+      </div>
+      <div class="rgroup-label">View</div>
+    </div>
+  </div>
+  <div class="ribbon-panel" id="ribbon-materials" role="tabpanel" aria-labelledby="tab-materials" hidden>
+    <div class="rgroup"><div class="rgroup-body big" id="ribbon-mat-library"></div><div class="rgroup-label">Library</div></div>
+    <div class="rgroup"><div class="rgroup-body"><div class="rstack" id="ribbon-mat-edit"></div></div><div class="rgroup-label">Material</div></div>
+  </div>
+</div>
 <dialog class="modal" id="tutorial" aria-labelledby="tutorial-title">
   <div class="dialog-head">
     <h2 id="tutorial-title">Tutorial</h2>
@@ -347,24 +385,6 @@
   </section>
   <section id="view">
     <canvas id="canvas"></canvas>
-    <div class="drawer" id="drawer">
-      <button class="drawer-handle" id="drawer-toggle" title="Show or hide the tools" aria-expanded="true">‹</button>
-      <div class="drawer-body">
-        <div class="drawer-section" id="primitives" aria-label="Finite shapes"><div class="drawer-title">Shapes</div></div>
-        <div class="drawer-section" id="surfaces" aria-label="Surfaces"><div class="drawer-title">Surfaces</div></div>
-        <div class="drawer-section" id="composites" aria-label="Composite surfaces"></div>
-        <div class="drawer-section" id="operations" aria-label="Combine selection"></div>
-      </div>
-    </div>
-    <div class="overlay tr">
-      <button class="tb" id="cutaway-toggle" title="Cutaway: section plane, quarter or eighth cut (K)">Cutaway</button>
-      <button class="tb" id="color-material" title="Color by material, with a legend (M)">Materials</button>
-      <button class="tb" id="void" title="Show void cells (V)">Void</button>
-      <button class="tb" id="world-box" title="Show the world box as a wireframe (W)">World</button>
-      <button class="tb" id="isolate" title="Show only the selected nodes (I)">Isolate</button>
-      <button class="tb" id="xray" title="Show hidden selected nodes as an x-ray ghost (X)">X-ray</button>
-      <button class="tb" id="fit" title="Frame the visible geometry (F)">Fit</button>
-    </div>
     <div class="cutaway-panel" id="cutaway-panel" hidden></div>
     <div class="legend" id="legend" hidden></div>
     <div id="status"><span id="msg">loading…</span><span id="stats"></span></div>
@@ -373,7 +393,7 @@
 </main>
 <main id="ws-materials" class="materials-main" role="tabpanel" aria-labelledby="tab-materials" hidden>
   <section class="panel" id="mat-list-panel">
-    <h2>Material library <span class="panel-actions"><button class="tb" id="mat-new" title="New empty material">New</button><button class="tb" id="mat-library" title="Add a reference material from the PNNL compendium bundled with OpenMC">Library…</button></span></h2>
+    <h2>Material library</h2>
     <div class="mat-search-row"><input type="text" id="mat-search" placeholder="Filter by id or name" spellcheck="false"></div>
     <div id="mat-list"></div>
     <div class="mat-list-actions"><button class="tb" id="mat-duplicate">Duplicate</button><button class="tb" id="mat-delete">Delete</button></div>

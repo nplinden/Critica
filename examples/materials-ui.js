@@ -418,12 +418,13 @@ export function createMaterialsWorkspace(ctx) {
     filter = e.target.value;
     renderList();
   });
-  $("mat-new").onclick = () => {
+  /** Adds an empty material and selects it (Materials ribbon: New). */
+  function newMaterial() {
     const m = scene().addMaterial();
     ctx.commit();
     ctx.changed();
     select(m.id);
-  };
+  }
   $("mat-duplicate").onclick = () => {
     const m = current();
     if (!m) return;
@@ -484,11 +485,11 @@ export function createMaterialsWorkspace(ctx) {
     dialog.showModal();
     search.focus();
   }
-  $("mat-library").onclick = () => openLibrary();
-
   return {
     render,
     select,
+    newMaterial,
+    openLibrary,
     /** Selects the first material, or keeps the current one. */
     get selected() {
       return selected;

@@ -46,6 +46,16 @@ const HIGHLIGHT = [1.0, 0.82, 0.4];
 const INT_PARAMS = new Set(["slices", "stacks", "segments", "rings"]);
 
 const ICONS = {
+  cutaway: '<path d="M8 1.5 14 5v6l-6 3.5L2 11V5z" stroke-opacity=".45"/><path d="M8 1.5V8l6-3M8 8l-6-3M8 8v6.5" stroke-dasharray="1.6 1.4"/><path d="M8 8 14 5v6l-6 3.5z" fill="currentColor" fill-opacity=".35"/>',
+  fit: '<path d="M2 5.5V2h3.5M10.5 2H14v3.5M14 10.5V14h-3.5M5.5 14H2v-3.5"/><rect x="5" y="5" width="6" height="6" rx="1"/>',
+  palette: '<path d="M8 1.8a6.2 6.2 0 1 0 0 12.4c1 0 1.4-.7 1.1-1.5-.4-.9.2-1.8 1.2-1.8h1.6a2.3 2.3 0 0 0 2.3-2.3C14.2 4.9 11.4 1.8 8 1.8z"/><circle cx="5" cy="7" r="1"/><circle cx="7.5" cy="4.6" r="1"/><circle cx="10.6" cy="5.6" r="1"/>',
+  void: '<rect x="2.5" y="2.5" width="11" height="11" rx="1.5" stroke-dasharray="2 1.6"/>',
+  worldbox: '<path d="M2 5h9v9H2z M2 5l3-3h9l-3 3 M14 2v9l-3 3"/>',
+  isolate: '<circle cx="8" cy="8" r="2.6" fill="currentColor" fill-opacity=".45"/><circle cx="8" cy="8" r="6" stroke-dasharray="1.4 1.6"/>',
+  xray: '<path d="M8 1.5 14 5v6l-6 3.5L2 11V5z M2 5l6 3.5L14 5 M8 8.5v6" stroke-dasharray="1.4 1.3"/>',
+  add: '<path d="M8 3v10M3 8h10"/>',
+  library: '<path d="M2.5 2.5h3v11h-3z M6.5 2.5h3v11h-3z M10.3 3.2l2.8-.8 2.4 10.6-2.8.8z"/>',
+  trash: '<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 9h5.6l.7-9"/>',
   cube: '<path d="M8 1.5 14 5v6l-6 3.5L2 11V5z M2 5l6 3.5L14 5 M8 8.5v6"/>',
   sphere: '<circle cx="8" cy="8" r="6"/><ellipse cx="8" cy="8" rx="6" ry="2.2"/>',
   cylinder: '<ellipse cx="8" cy="3.5" rx="5" ry="2"/><path d="M3 3.5v9c0 1.1 2.2 2 5 2s5-.9 5-2v-9"/>',
@@ -1899,13 +1909,13 @@ function addComposite(type) {
 }
 
 /**
- * Replaces a builder shape (cube, cylinder, cone, …) by the intersection of
+ * Replaces a builder shape (cube, sphere, cylinder, cone, …) by the intersection of
  * the half-spaces it is made of, on scene surfaces, with its transform applied:
  * the same region, built from editable surfaces.
  */
 function flattenNode(id) {
   const node = scene.find(id)?.node;
-  if (!node || !isPrimitive(node)) throw new Error("Only shapes (cube, cylinder, cone) can be flattened.");
+  if (!node || !isPrimitive(node)) throw new Error("Only shapes (cube, sphere, cylinder, cone) can be flattened.");
   const entries = nodeSurfaces(node);
   const inexact = entries.find((e) => e.note);
   if (inexact) throw new Error(`"${node.name}" cannot be flattened: its transform ${inexact.note}.`);
@@ -2370,15 +2380,16 @@ async function openFile(file) {
 
 // ---- toolbar -----------------------------------------------------------------
 
-// ---- tool drawer ----
-// Flyouts: a drawer button that opens a menu of choices to the right of the drawer.
+// ---- ribbon tools ----
+// Flyouts: a ribbon button that drops down a menu of choices.
 const flyouts = [];
 
+/** A ribbon button with a dropdown of `items` ({ label, title, run }) below it. */
 function flyoutButton({ id, iconName, label, title, heading, items }) {
   const menu = h(
     "div",
-    { class: "drawer-menu", role: "menu", hidden: true },
-    heading && h("div", { class: "drawer-menu-title" }, heading),
+    { class: "ribbon-menu", role: "menu", hidden: true },
+    heading && h("div", { class: "ribbon-menu-title" }, heading),
     items.map((item) =>
       h(
         "button",
@@ -2407,26 +2418,31 @@ function flyoutButton({ id, iconName, label, title, heading, items }) {
         const open = menu.hidden;
         for (const f of flyouts) f.menu.hidden = true;
         if (open) {
-          // Align the menu with its button.
-          menu.style.top = `${button.getBoundingClientRect().top - $("drawer").getBoundingClientRect().top}px`;
+          // Drop down under the button, kept inside the window.
+          const r = button.getBoundingClientRect();
           menu.hidden = false;
+          menu.style.top = `${r.bottom + 2}px`;
+          menu.style.left = `${Math.max(4, Math.min(r.left, innerWidth - menu.offsetWidth - 4))}px`;
         }
       },
     },
     icon(iconName),
-    h("span", { class: "label" }, `${label} ▸`),
+    h("span", { class: "label" }, `${label} ▾`),
   );
   flyouts.push({ button, menu });
-  $("drawer").append(menu);
+  document.body.append(menu);
   return button;
 }
+// Dropdowns are positioned once on opening: close them when the layout moves.
+for (const ev of ["resize", "blur"]) addEventListener(ev, () => flyouts.forEach((f) => (f.menu.hidden = true)));
+$("ribbon").addEventListener("scroll", () => flyouts.forEach((f) => (f.menu.hidden = true)));
 
 document.addEventListener("click", (e) => {
   for (const f of flyouts) if (!f.menu.hidden && !f.menu.contains(e.target)) f.menu.hidden = true;
 });
 
 // Finite shapes (builder primitives that export as several surfaces).
-for (const kind of ["cube", "cylinder", "cone"]) {
+for (const kind of ["cube", "sphere", "cylinder", "cone"]) {
   const def = PRIMITIVES[kind];
   $("primitives").append(
     h(
@@ -2495,7 +2511,7 @@ for (const [kind, def] of Object.entries(OPERATIONS)) {
     ),
   );
 }
-$("operations").append(
+$("operations-more").append(
   h("button", { class: "tb", id: "ungroup", title: "Replace the selected operation by its children", onclick: () => run(ungroup) }, icon("ungroup"), h("span", { class: "label" }, "Ungroup")),
   h("button", { class: "tb", id: "duplicate", title: "Duplicate the selection (Ctrl+D)", onclick: () => run(duplicateSelection) }, icon("duplicate"), h("span", { class: "label" }, "Duplicate")),
   h("button", { class: "tb", id: "reference", title: "Reuse the selected regions elsewhere: adds live references (R)", onclick: () => run(addReferences) }, icon("ref"), h("span", { class: "label" }, "Reference")),
@@ -2524,26 +2540,45 @@ $("tree-actions").append(
   ),
 );
 
-// The drawer remembers whether it was collapsed.
-const DRAWER_KEY = "critica.builder.drawer";
-function setDrawer(open) {
-  $("drawer").classList.toggle("collapsed", !open);
-  $("drawer-toggle").textContent = open ? "‹" : "›";
-  $("drawer-toggle").setAttribute("aria-expanded", String(open));
+// View group: big Cutaway and Fit buttons around the stacked toggles.
+$("cutaway-toggle").append(icon("cutaway"), h("span", { class: "label" }, "Cutaway"));
+$("fit").append(icon("fit"), h("span", { class: "label" }, "Fit"));
+for (const [id, name] of [["color-material", "palette"], ["void", "void"], ["world-box", "worldbox"], ["isolate", "isolate"], ["xray", "xray"]]) $(id).prepend(icon(name));
+
+// Materials ribbon: the library actions of the workspace's list panel.
+$("ribbon-mat-library").append(
+  h("button", { class: "tb", title: "New empty material", onclick: () => materialsUI.newMaterial() }, icon("add"), h("span", { class: "label" }, "New")),
+  h("button", { class: "tb", title: "Add a reference material from the PNNL compendium bundled with OpenMC", onclick: () => materialsUI.openLibrary() }, icon("library"), h("span", { class: "label" }, "Library…")),
+);
+$("ribbon-mat-edit").append(
+  h("button", { class: "tb", title: "Duplicate the selected material", onclick: () => $("mat-duplicate").click() }, icon("duplicate"), "Duplicate"),
+  h("button", { class: "tb", title: "Delete the selected material", onclick: () => $("mat-delete").click() }, icon("trash"), "Delete"),
+);
+
+// The ribbon can be collapsed to give the canvas more room; remembered.
+const RIBBON_KEY = "critica.builder.ribbon";
+function setRibbon(open) {
+  $("ribbon").classList.toggle("collapsed", !open);
+  $("ribbon-toggle").textContent = open ? "▴" : "▾";
+  $("ribbon-toggle").title = open ? "Collapse the ribbon" : "Expand the ribbon";
+  $("ribbon-toggle").setAttribute("aria-expanded", String(open));
+  viewer.redraw();
   try {
-    localStorage.setItem(DRAWER_KEY, open ? "open" : "closed");
+    localStorage.setItem(RIBBON_KEY, open ? "open" : "closed");
   } catch {
-    // Storage unavailable: the drawer simply resets next time.
+    // Storage unavailable: the ribbon simply resets next time.
   }
 }
-let drawerOpen = true;
+let ribbonOpen = true;
 try {
-  drawerOpen = (localStorage.getItem(DRAWER_KEY) ?? localStorage.getItem("geomium.builder.drawer")) !== "closed";
+  ribbonOpen = localStorage.getItem(RIBBON_KEY) !== "closed";
 } catch {
   // Storage unavailable: default to open.
 }
-setDrawer(drawerOpen);
-$("drawer-toggle").onclick = () => setDrawer($("drawer").classList.contains("collapsed"));
+setRibbon(ribbonOpen);
+$("ribbon-toggle").onclick = () => setRibbon($("ribbon").classList.contains("collapsed"));
+// Double-clicking the active tab also collapses or expands it, as in office suites.
+for (const t of ["geometry", "materials"]) $(`tab-${t}`).addEventListener("dblclick", () => setRibbon($("ribbon").classList.contains("collapsed")));
 
 // ---- Menus (File, Help) ----
 // Desktop-style dropdowns: click to open, hover entries with ▸ to open their
@@ -2653,6 +2688,7 @@ function setTab(tab) {
   activeTab = tab;
   for (const t of ["geometry", "materials"]) {
     $(`ws-${t}`).hidden = t !== tab;
+    $(`ribbon-${t}`).hidden = t !== tab;
     $(`tab-${t}`).classList.toggle("on", t === tab);
     $(`tab-${t}`).setAttribute("aria-selected", String(t === tab));
   }
@@ -3001,7 +3037,7 @@ function renderTutorial() {
     h(
       "ul",
       {},
-      h("li", {}, "Use the ", b("tool drawer"), " on the canvas: ", b("Shapes"), " are finite (cube, cylinder, cone); ", b("Surfaces"), " add an OpenMC surface (planes, infinite cylinders and cones, spheres, tori), listed under ", b("Surfaces"), " in the scene tree."),
+      h("li", {}, "Use the ", b("Geometry"), " ribbon at the top: ", b("Shapes"), " are finite (cube, sphere, cylinder, cone); ", b("Surfaces"), " add an OpenMC surface (planes, infinite cylinders and cones, spheres, tori), listed under ", b("Surfaces"), " in the scene tree."),
       h("li", {}, "A surface is not a region yet: select it, then press ", b("Half-space"), " (above the scene tree) to use one of its sides. Several half-spaces can share a surface."),
       h("li", {}, b("Composite ▸"), " adds OpenMC composite surfaces: hexagonal prisms, cylinder sectors, polygons, vessels and more."),
       h("li", {}, "With one operation, cell or universe selected, new shapes go inside it."),

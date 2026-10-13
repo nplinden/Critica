@@ -63,12 +63,16 @@ npm run demo    # builder at http://localhost:1948/
 
 `examples/index.html` is a point-and-click modeller:
 
-- **Tool drawer** (floating over the canvas, collapsible): *Shapes* adds
-  finite cubes, cylinders and cones; *Surfaces* adds a bare OpenMC surface
+- **Ribbon**: the *Geometry* and *Materials* tabs at the top each have a
+  ribbon of tools (collapsible with ▴ or a double-click on the tab). The
+  *Geometry* ribbon groups the tools: *Shapes* adds
+  finite cubes, spheres, cylinders and cones; *Surfaces* adds a bare OpenMC surface
   (no region yet): *Plane ▸* (X, Y, Z or arbitrary), infinite *Cylinder ▸* and
   *Cone ▸* (X, Y, Z), *Sphere*, *Torus ▸* (X, Y, Z); *Composite ▸* adds OpenMC
-  composite surfaces; then Union, Subtract, Intersect, Complement, Ungroup,
-  Duplicate and Reference. When one operation, cell or universe is selected,
+  composite surfaces; *Combine* has Union, Subtract, Intersect, Complement,
+  Ungroup, Duplicate and Reference; *View* has Cutaway, the By material, Void,
+  World box, Isolate and X-ray toggles, and Fit. The *Materials* ribbon has
+  New, Library…, Duplicate and Delete. When one operation, cell or universe is selected,
   new nodes go inside it.
 - **Top bar**: a *File* menu (New, Open… <kbd>Ctrl+O</kbd>, Save
   <kbd>Ctrl+S</kbd>, Export as → OpenMC XML…), *Settings* (light/dark theme or follow the OS,
@@ -107,10 +111,10 @@ npm run demo    # builder at http://localhost:1948/
   the cell keeps its region and both uses stay in sync. The *Reference* tool
   (<kbd>R</kbd>) adds references explicitly; a reference can be turned into an
   independent copy. Exports write the shared surfaces once.
-- **Flatten**: right-click a shape (cube, cylinder, cone) in the tree or the
+- **Flatten**: right-click a shape (cube, sphere, cylinder, cone) in the tree or the
   viewport, or use the button in its properties, to replace it by the
   intersection of the half-spaces it is made of, on scene surfaces, with its
-  transform applied (a cube becomes six planes). Identical surfaces already
+  transform applied (a cube becomes six planes, a sphere one sphere half-space). Identical surfaces already
   in the scene are reused, so adjacent shapes share their planes, and the
   node keeps its id, so references to it still work. Right-click also offers
   Rename, Duplicate and Delete.
@@ -151,12 +155,12 @@ recomputes that node and its ancestors, and undo is instant.
   editing one updates every cell that uses it, or use *Use a private copy* to
   edit one use only. Cells show their material or universe fill, and
   universes are listed under the tree.
-- New OpenMC geometry can be built directly: *Surfaces* (tool drawer) adds a surface
+- New OpenMC geometry can be built directly: *Surfaces* (ribbon) adds a surface
   (its type can be changed to any OpenMC type, with boundary conditions), *Half-space*
   (above the scene tree) makes a region from one side of it, *Cell* wraps a region into a
   cell with a material or universe fill, and *Universe* adds a universe.
   Builder primitives can be mixed in; they export as exact analytic surfaces.
-- *Composite* (tool drawer) adds any of OpenMC's 13 composite surfaces
+- *Composite* (ribbon) adds any of OpenMC's composite surfaces
   (cylinder sector, hexagonal and rectangular prisms with rounded corners,
   polygon, vessel, …) as one parametric node with an inside/outside side.
   A selected cylinder sector shows construction lines inside its hole
