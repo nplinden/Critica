@@ -23,7 +23,7 @@ import { compositeExpansion, isIdentity } from "./scene.js";
 import { importOpenMC, importMaterialsXML } from "./openmc/import.js";
 import { exportOpenMC, exportMaterialsXML, primitiveSurfaces } from "./openmc/export.js";
 import { transformSurface, toForm, transformForm, isPlane, evaluate as evaluateSurface } from "./openmc/surfaces.js";
-import { fromTransform, multiply, IDENTITY } from "./mat4.js";
+import { fromTransform, multiply, IDENTITY, invert, transformPoint } from "./mat4.js";
 import { createMaterialsWorkspace } from "./materials-ui.js";
 import { COMPOSITE_TYPES } from "./openmc/composite.js";
 
@@ -480,6 +480,39 @@ function openSides(mesh, dirs) {
   return flags;
 }
 
+/**
+ * Construction lines of a selected cylinder sector inside its hole (r < r1):
+ * spokes from the axis to the two inner edges at both ends of the displayed
+ * length, and the axis itself. Model coordinates; [] for other nodes.
+ */
+function sectorWires(node) {
+  if (node?.kind !== "composite" || node.params.type !== "cylinder-sector" || !results.world) return [];
+  const root = rootMatrixOf(node.id);
+  if (!root) return [];
+  const m = isIdentity(node.transform) ? root : multiply(root, fromTransform(node.transform));
+  const { r1, theta1, theta2, center, axis } = node.params.values ?? {};
+  const k = { x: 0, y: 1, z: 2 }[axis];
+  if (k === undefined || !(r1 >= 0)) return [];
+  // In-plane coordinates (a, b) and the axial one h, mapped as OpenMC does.
+  const order = { z: [0, 1, 2], y: [0, 2, 1], x: [2, 0, 1] }[axis];
+  const point = (a, b, h) => transformPoint(m, order.map((i) => [a, b, h][i]));
+  // Axial extent: the world box seen from the sector's own frame.
+  const inv = invert(m);
+  const w = results.world;
+  const hs = [];
+  for (let c = 0; c < 8; c++) hs.push(transformPoint(inv, [0, 1, 2].map((i) => ((c >> i) & 1 ? w.max[i] : w.min[i])))[k]);
+  const [h0, h1] = [Math.min(...hs), Math.max(...hs)];
+  const [c0, c1] = center;
+  const color = HIGHLIGHT;
+  const out = [{ from: point(c0, c1, h0), to: point(c0, c1, h1), color }];
+  for (const h of [h0, h1])
+    for (const t of [theta1, theta2]) {
+      const phi = (Math.PI / 180) * t;
+      out.push({ from: point(c0, c1, h), to: point(c0 + r1 * Math.cos(phi), c1 + r1 * Math.sin(phi), h), color });
+    }
+  return out;
+}
+
 const PLUS_COLOR = [0.95, 0.42, 0.32];
 const MINUS_COLOR = [0.32, 0.6, 0.98];
 
@@ -655,7 +688,8 @@ function renderViewport(fit) {
     marks.push(...sideMarks(d.surface, shellSamples(m, indices), null, tag));
     for (const v of indices) shellPoints.push([m.positions[v * 3], m.positions[v * 3 + 1], m.positions[v * 3 + 2]]);
   });
-  viewer.setGizmos({ planes, arrows, surfaces, marks });
+  const wires = selection.flatMap((id) => sectorWires(nodeById.get(id)));
+  viewer.setGizmos({ planes, arrows, surfaces, marks, wires });
   // Fit should frame the sheets and shells too.
   const sheetPoints = [...planes.flatMap((p) => p.polygon), ...shellPoints];
   const ghostMeshes = ghostIds.flatMap((id) => partsOf(id).map((p) => meshOf(p.solid))).filter(Boolean);

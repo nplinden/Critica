@@ -11,7 +11,8 @@
 //   viewer.setGizmos({ planes, arrows, surfaces });  // plane sheets, 3D arrows and translucent
 //       surface shells (model coordinates): planes: [{ polygon: [[x,y,z]…], normal, color, tag }],
 //       arrows: [{ from, dir, length, color, tag }], surfaces: [{ positions, normals, indices, color, tag }],
-//       marks: [{ center, normal, u, size, plus, color, tag }] (flat + / − signs; u = in-plane direction)
+//       marks: [{ center, normal, u, size, plus, color, tag }] (flat + / − signs; u = in-plane direction),
+//       wires: [{ from, to, color }] (construction lines, faint where hidden)
 //   viewer.setClip(planes);         // cutaway: hide the region where n·p > d for every plane
 //                                   // (0–3 planes {n, d}, model coordinates); [] shows everything
 //
@@ -58,6 +59,7 @@ void main() {
     return;
   }
   if (uMode == 3) { outColor = vec4(vColor, 1.0); return; } // unlit lines
+  if (uMode == 6) { outColor = vec4(vColor, uTint.a); return; } // unlit lines, translucent
   if (uMode == 4) { // translucent sheets (plane gizmos), lit from both sides
     vec3 sn = normalize(vNormal);
     float lit = 0.6 + 0.4 * abs(dot(sn, normalize(vec3(0.4, 0.7, 0.6))));
@@ -196,6 +198,8 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
   const gizmoArrows = makeDrawable(["aPos", "aNormal", "aColor", "aTag"]);
   const gizmoMarks = makeDrawable(["aPos", "aNormal", "aColor", "aTag"]); // + / − signs, seen from their side only
   const gizmoLines = makeDrawable(["aPos", "aColor"]);
+  const gizmoWires = makeDrawable(["aPos", "aColor"]);
+  let gizmoWireCount = 0;
   let gizmoLineCount = 0;
   let lineCount = 0;
 
@@ -375,7 +379,7 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
 
   /** Arrows (opaque, shaded), sheet outlines, then translucent sheets. Mode 1 = picking. */
   function drawGizmos(mode) {
-    if (!gizmoArrows.count && !gizmoSheets.count && !gizmoMarks.count) return;
+    if (!gizmoArrows.count && !gizmoSheets.count && !gizmoMarks.count && !gizmoWireCount) return;
     gl.useProgram(prog);
     applyClip();
     gl.uniformMatrix4fv(u.uModel, false, model);
@@ -404,6 +408,22 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
       gl.uniform1i(u.uMode, 3);
       gl.bindVertexArray(gizmoLines.vao);
       gl.drawArrays(gl.LINES, 0, gizmoLineCount);
+    }
+    if (gizmoWireCount) {
+      // Construction lines: solid where visible, faint behind solids.
+      gl.bindVertexArray(gizmoWires.vao);
+      gl.uniform1i(u.uMode, 3);
+      gl.drawArrays(gl.LINES, 0, gizmoWireCount);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.depthMask(false);
+      gl.depthFunc(gl.GREATER);
+      gl.uniform1i(u.uMode, 6);
+      gl.uniform4f(u.uTint, 1, 1, 1, 0.4);
+      gl.drawArrays(gl.LINES, 0, gizmoWireCount);
+      gl.depthFunc(gl.LESS);
+      gl.depthMask(true);
+      gl.disable(gl.BLEND);
     }
     if (gizmoSheets.count) {
       // Translucent and without depth writes, so nothing behind is hidden.
@@ -621,7 +641,7 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
       redraw();
     },
     /** Plane sheets (with outlines), 3D arrows and surface shells, in model coordinates; tags make them pickable. */
-    setGizmos({ planes = [], arrows = [], surfaces = [], marks = [] } = {}) {
+    setGizmos({ planes = [], arrows = [], surfaces = [], marks = [], wires = [] } = {}) {
       const sheet = { pos: [], nrm: [], col: [], tag: [], idx: [] };
       const outline = { pos: [], col: [] };
       for (const p of planes) {
@@ -660,6 +680,13 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
       upload(gizmoMarks, mark);
       gizmoLines.upload({ aPos: new Float32Array(outline.pos), aColor: new Float32Array(outline.col) });
       gizmoLineCount = outline.pos.length / 3;
+      const wire = { pos: [], col: [] };
+      for (const w of wires) {
+        wire.pos.push(...w.from, ...w.to);
+        wire.col.push(...w.color, ...w.color);
+      }
+      gizmoWires.upload({ aPos: new Float32Array(wire.pos), aColor: new Float32Array(wire.col) });
+      gizmoWireCount = wire.pos.length / 3;
       redraw();
     },
     /** Switches background and grid colors ("dark" or "light"). */

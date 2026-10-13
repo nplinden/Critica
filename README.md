@@ -157,7 +157,9 @@ recomputes that node and its ancestors, and undo is instant.
 - *Composite* (tool drawer) adds any of OpenMC's 13 composite surfaces
   (cylinder sector, hexagonal and rectangular prisms with rounded corners,
   polygon, vessel, …) as one parametric node with an inside/outside side.
-  They export as the primitive surfaces OpenMC would generate, and
+  A selected cylinder sector shows construction lines inside its hole
+  (r < inner radius): its axis and the spokes from the axis to its two
+  edges. They export as the primitive surfaces OpenMC would generate, and
   *Expand to half-spaces* turns one into editable half-spaces.
 - Infinite half-spaces are drawn inside a world box, auto-fitted to the
   bounded content (or set manually in *Settings*). Faces that only exist
