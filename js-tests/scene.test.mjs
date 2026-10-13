@@ -224,3 +224,23 @@ test("reordering surfaces renumbers them and updates their users", () => {
   assert.equal(s.reorderSurface(5, 6, "before"), null); // already there
   assert.equal(s.reorderSurface(5, 5), null);
 });
+
+test("replacing a node by half-spaces keeps its id and reuses identical surfaces", () => {
+  const s = new Scene();
+  s.addSurface({ type: "x-plane", coeffs: [1] }); // already there: reused
+  const cube = s.add("cube", { name: "Box" });
+  const ref = s.add("ref", { params: { target: cube.id } });
+  const top = s.replaceWithHalfspaces(cube.id, [
+    { surface: { type: "x-plane", coeffs: [-1] }, sense: "+" },
+    { surface: { type: "x-plane", coeffs: [1] }, sense: "-" },
+  ]);
+  assert.equal(top.id, cube.id);
+  assert.equal(top.kind, "intersect");
+  assert.equal(top.name, "Box");
+  assert.deepEqual(top.children.map((c) => [c.params.surface, c.params.sense]), [[2, "+"], [1, "-"]]);
+  assert.equal(s.surfaces.size, 2);
+  assert.equal(s.find(ref.params.target).node, top);
+  const one = s.replaceWithHalfspaces(top.id, [{ surface: { type: "sphere", coeffs: [0, 0, 0, 1] }, sense: "-" }]);
+  assert.equal(one.kind, "halfspace");
+  assert.equal(one.id, cube.id);
+});

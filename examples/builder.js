@@ -1051,10 +1051,16 @@ tree.addEventListener("click", (e) => {
 });
 
 tree.addEventListener("contextmenu", (e) => {
-  const row = e.target.closest(".surface-row");
+  const surfaceRow = e.target.closest(".surface-row");
+  if (surfaceRow) {
+    e.preventDefault();
+    surfaceMenu(surfaceRow.dataset.surface, e.clientX, e.clientY);
+    return;
+  }
+  const row = e.target.closest(".row[data-id]");
   if (!row) return;
   e.preventDefault();
-  surfaceMenu(row.dataset.surface, e.clientX, e.clientY);
+  nodeMenu(Number(row.dataset.id), e.clientX, e.clientY);
 });
 
 tree.addEventListener("dblclick", (e) => {
@@ -1376,7 +1382,19 @@ function renderPropsBody() {
           ? field("axis", select_(`params.${key}`, [["x", "X"], ["y", "Y"], ["z", "Z"]], value))
           : field(key, numberInput(node, `params.${key}`, INT_PARAMS.has(key) ? { step: 1, min: key === "stacks" ? 2 : 3, integer: true } : PARAM_OPTS[key])),
     );
-    sections.push(h("div", { class: "section" }, h("h3", {}, "Shape"), params));
+    sections.push(
+      h(
+        "div",
+        { class: "section" },
+        h("h3", {}, "Shape"),
+        params,
+        h(
+          "div",
+          { class: "props-actions" },
+          h("button", { class: "tb", title: "Replace this shape by the intersection of its half-spaces, on editable scene surfaces", onclick: () => run(flattenNode, node.id) }, "Flatten to half-spaces"),
+        ),
+      ),
+    );
   }
 
   if (node.kind === "halfspace") sections.push(...halfspaceSections(node));
@@ -1822,6 +1840,44 @@ function addComposite(type) {
   select([node.id]);
 }
 
+/**
+ * Replaces a builder shape (cube, cylinder, cone, …) by the intersection of
+ * the half-spaces it is made of, on scene surfaces, with its transform applied:
+ * the same region, built from editable surfaces.
+ */
+function flattenNode(id) {
+  const node = scene.find(id)?.node;
+  if (!node || !isPrimitive(node)) throw new Error("Only shapes (cube, cylinder, cone) can be flattened.");
+  const entries = nodeSurfaces(node);
+  const inexact = entries.find((e) => e.note);
+  if (inexact) throw new Error(`"${node.name}" cannot be flattened: its transform ${inexact.note}.`);
+  const top = scene.replaceWithHalfspaces(id, entries.map(({ surface, sense }) => ({ surface, sense })));
+  top.surfacesOpen = false;
+  commit();
+  select([top.id]);
+  setMessage(`Flattened "${node.name}" into ${entries.length} half-space${entries.length > 1 ? "s" : ""}.`);
+}
+
+/** Right-click menu of a node: flatten (shapes), expand (composites), rename, duplicate, delete. */
+function nodeMenu(id, x, y) {
+  const node = scene.find(id)?.node;
+  if (!node) return;
+  if (!(selection.length === 1 && selection[0] === id) && !selection.includes(id)) select([id]);
+  const several = selection.length > 1;
+  openContextMenu(x, y, [
+    isPrimitive(node) && {
+      label: "Flatten to half-spaces",
+      title: "Replace this shape by the intersection of the half-spaces it is made of, on editable scene surfaces",
+      run: () => flattenNode(id),
+    },
+    node.kind === "composite" && { label: "Expand to half-spaces", run: () => (select([id]), expandComposite()) },
+    (isPrimitive(node) || node.kind === "composite") && "sep",
+    !several && { label: "Rename…", hint: "F2", run: () => renameSelection() },
+    { label: several ? `Duplicate ${selection.length} nodes` : "Duplicate", hint: "Ctrl+D", run: () => duplicateSelection() },
+    { label: several ? `Delete ${selection.length} nodes` : "Delete", hint: "Del", run: () => deleteSelection() },
+  ]);
+}
+
 function expandComposite() {
   const node = primary();
   if (!node || node.kind !== "composite") return;
@@ -2065,9 +2121,18 @@ function surfaceMoves(id) {
   ];
 }
 
-function onViewContext(tag, e) {
-  const key = tag >= SURFACE_TAG ? displayed[tag - SURFACE_TAG]?.key : null;
-  if (key) surfaceMenu(key, e.clientX, e.clientY);
+function onViewContext(tag, e, leaf) {
+  if (tag >= SURFACE_TAG) {
+    const key = displayed[tag - SURFACE_TAG]?.key;
+    if (key) surfaceMenu(key, e.clientX, e.clientY);
+    return;
+  }
+  if (!tag || !scene.find(tag)) return;
+  // The shape under the pointer, so it can be flattened even inside a region.
+  const target = pickTarget(tag, leaf, true, () => hitPoint(e));
+  const node = scene.find(target)?.node;
+  if (node && isPrimitive(node)) return nodeMenu(target, e.clientX, e.clientY);
+  nodeMenu(pickTarget(tag, leaf, false, () => hitPoint(e)), e.clientX, e.clientY);
 }
 
 function onPick(tag, e, leaf) {

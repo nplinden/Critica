@@ -557,7 +557,10 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
       const tag = pick(e.clientX, e.clientY);
       onPick(tag, e, tag ? pick(e.clientX, e.clientY, true) : 0);
     }
-    if (moved < 4 && e.button === 2 && onContext) onContext(pick(e.clientX, e.clientY), e);
+    if (moved < 4 && e.button === 2 && onContext) {
+      const tag = pick(e.clientX, e.clientY);
+      onContext(tag, e, tag ? pick(e.clientX, e.clientY, true) : 0);
+    }
   });
   canvas.addEventListener("pointermove", (e) => {
     if (!drag) return;

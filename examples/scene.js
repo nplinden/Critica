@@ -194,6 +194,35 @@ export class Scene {
     return top;
   }
 
+  /**
+   * Replaces node `id` by the intersection of half-spaces on scene surfaces
+   * (`entries`: [{ surface: { type, coeffs }, sense }], in the node's parent
+   * frame), or by one half-space when there is a single entry. Identical
+   * transmission surfaces already in the scene are reused. The replacement
+   * keeps the node's id, name and enabled state, so references still resolve.
+   */
+  replaceWithHalfspaces(id, entries) {
+    const hit = this.find(id);
+    if (!hit || !entries.length) return null;
+    const same = (a, b) => a.type === b.type && a.coeffs.length === b.coeffs.length && a.coeffs.every((c, i) => Math.abs(c - b.coeffs[i]) <= 1e-12 * Math.max(1, Math.abs(c)));
+    const halfspaces = entries.map(({ surface, sense }) => {
+      let sid = [...this.surfaces.values()].find((s) => (s.boundary ?? "transmission") === "transmission" && same(s, surface))?.id;
+      sid ??= this.addSurface({ type: surface.type, coeffs: [...surface.coeffs] });
+      const s = this.surfaces.get(sid);
+      return this.create("halfspace", { params: { surface: sid, sense }, name: `${sense === "-" ? "−" : "+"}${sid} ${s.type}${s.name ? ` (${s.name})` : ""}` });
+    });
+    let top = halfspaces[0];
+    if (halfspaces.length > 1) {
+      top = this.create("intersect");
+      top.children = halfspaces;
+    }
+    top.id = hit.node.id;
+    top.name = hit.node.name;
+    top.enabled = hit.node.enabled;
+    hit.list.splice(hit.index, 1, top);
+    return top;
+  }
+
   // ---- structure --------------------------------------------------------------
 
   get lists() {

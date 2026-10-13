@@ -107,6 +107,13 @@ npm run demo    # builder at http://localhost:1948/
   the cell keeps its region and both uses stay in sync. The *Reference* tool
   (<kbd>R</kbd>) adds references explicitly; a reference can be turned into an
   independent copy. Exports write the shared surfaces once.
+- **Flatten**: right-click a shape (cube, cylinder, cone) in the tree or the
+  viewport, or use the button in its properties, to replace it by the
+  intersection of the half-spaces it is made of, on scene surfaces, with its
+  transform applied (a cube becomes six planes). Identical surfaces already
+  in the scene are reused, so adjacent shapes share their planes, and the
+  node keeps its id, so references to it still work. Right-click also offers
+  Rename, Duplicate and Delete.
 - **Properties**: shape parameters and position, rotation and scale for any
   node, plus the triangle count, volume and size of the selected node's
   result.
