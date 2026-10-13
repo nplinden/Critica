@@ -159,6 +159,8 @@
   .ribbon-menu { position: fixed; z-index: 30; display: flex; flex-direction: column; gap: 1px; padding: 6px; min-width: 210px; background: var(--panel); border: 1px solid var(--line-2); border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35); }
   .ribbon-menu[hidden] { display: none; }
   .ribbon-menu .tb { justify-content: flex-start; }
+  .ribbon-menu-title + .tb, .ribbon-menu .tb + .ribbon-menu-title { margin-top: 0; }
+  .ribbon-menu .tb + .ribbon-menu-title { margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
   .ribbon-menu-title { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 2px 8px 6px; }
 
   /* ---- materials workspace ---- */
@@ -329,9 +331,8 @@
 </header>
 <div class="ribbon" id="ribbon">
   <div class="ribbon-panel" id="ribbon-geometry" role="tabpanel" aria-labelledby="tab-geometry">
-    <div class="rgroup"><div class="rgroup-body big" id="primitives" aria-label="Finite shapes"></div><div class="rgroup-label">Shapes</div></div>
     <div class="rgroup"><div class="rgroup-body big" id="surfaces" aria-label="Surfaces"></div><div class="rgroup-label">Surfaces</div></div>
-    <div class="rgroup"><div class="rgroup-body big" id="composites" aria-label="Composite surfaces"></div><div class="rgroup-label">Composite</div></div>
+    <div class="rgroup"><div class="rgroup-body big" id="primitives" aria-label="Shapes"></div><div class="rgroup-label">Shapes</div></div>
     <div class="rgroup">
       <div class="rgroup-body"><div class="rgroup-body big" id="operations" aria-label="Combine selection"></div><div class="rstack" id="operations-more"></div></div>
       <div class="rgroup-label">Combine</div>

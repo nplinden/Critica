@@ -54,6 +54,7 @@ const ICONS = {
   isolate: '<circle cx="8" cy="8" r="2.6" fill="currentColor" fill-opacity=".45"/><circle cx="8" cy="8" r="6" stroke-dasharray="1.4 1.6"/>',
   xray: '<path d="M8 1.5 14 5v6l-6 3.5L2 11V5z M2 5l6 3.5L14 5 M8 8.5v6" stroke-dasharray="1.4 1.3"/>',
   add: '<path d="M8 3v10M3 8h10"/>',
+  more: '<rect x="2" y="2" width="5" height="5" rx="1"/><circle cx="11.5" cy="4.5" r="2.5"/><path d="M4.5 9 7 14H2z"/><path d="M9 11.5h5M11.5 9v5"/>',
   library: '<path d="M2.5 2.5h3v11h-3z M6.5 2.5h3v11h-3z M10.3 3.2l2.8-.8 2.4 10.6-2.8.8z"/>',
   trash: '<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 9h5.6l.7-9"/>',
   cube: '<path d="M8 1.5 14 5v6l-6 3.5L2 11V5z M2 5l6 3.5L14 5 M8 8.5v6"/>',
@@ -2384,26 +2385,32 @@ async function openFile(file) {
 // Flyouts: a ribbon button that drops down a menu of choices.
 const flyouts = [];
 
-/** A ribbon button with a dropdown of `items` ({ label, title, run }) below it. */
+/**
+ * A ribbon button with a dropdown of `items` below it: { label, title, run,
+ * iconName? } entries, or { heading } to start a titled section.
+ */
 function flyoutButton({ id, iconName, label, title, heading, items }) {
   const menu = h(
     "div",
     { class: "ribbon-menu", role: "menu", hidden: true },
     heading && h("div", { class: "ribbon-menu-title" }, heading),
     items.map((item) =>
-      h(
-        "button",
-        {
-          class: "tb",
-          role: "menuitem",
-          title: item.title ?? "",
-          onclick: () => {
-            menu.hidden = true;
-            run(item.run);
-          },
-        },
-        item.label,
-      ),
+      item.heading
+        ? h("div", { class: "ribbon-menu-title" }, item.heading)
+        : h(
+            "button",
+            {
+              class: "tb",
+              role: "menuitem",
+              title: item.title ?? "",
+              onclick: () => {
+                menu.hidden = true;
+                run(item.run);
+              },
+            },
+            item.iconName && icon(item.iconName),
+            item.label,
+          ),
     ),
   );
   const button = h(
@@ -2442,20 +2449,9 @@ document.addEventListener("click", (e) => {
 });
 
 // Finite shapes (builder primitives that export as several surfaces).
-for (const kind of ["cube", "sphere", "cylinder", "cone"]) {
-  const def = PRIMITIVES[kind];
-  $("primitives").append(
-    h(
-      "button",
-      { class: "tb", title: `Add a finite ${def.label.toLowerCase()} (inside the selected operation or cell, if any)`, onclick: () => run(addPrimitive, kind) },
-      icon(kind),
-      h("span", { class: "label" }, def.label),
-    ),
-  );
-}
-
-// OpenMC surfaces: each adds a bare surface. The Half-space button above the
-// tree then makes half-spaces on the selected surface.
+// ---- Surfaces group: the common surfaces up front, cones and tori under Others.
+// Each adds a bare surface; the Half-space button above the tree then makes
+// half-spaces on the selected surface.
 const AXES_XYZ = ["x", "y", "z"];
 const surfaceItems = (family, noun) =>
   AXES_XYZ.map((a) => ({ label: `${a.toUpperCase()} ${noun}`, title: `${a}-${family}`, run: () => addSurface(`${a}-${family}`) }));
@@ -2468,6 +2464,7 @@ $("surfaces").append(
     title: "Add a plane surface (x/y/z-plane or an arbitrary plane)",
     items: [...surfaceItems("plane", "plane"), { label: "Arbitrary plane", title: "plane: Ax + By + Cz = D", run: () => addSurface("plane") }],
   }),
+  h("button", { class: "tb", id: "surface-sphere", title: "Add a sphere surface", onclick: () => run(addSurface, "sphere") }, icon("sphere"), h("span", { class: "label" }, "Sphere")),
   flyoutButton({
     id: "surface-cylinder",
     iconName: "infcylinder",
@@ -2477,21 +2474,38 @@ $("surfaces").append(
     items: surfaceItems("cylinder", "cylinder"),
   }),
   flyoutButton({
-    id: "surface-cone",
-    iconName: "infcone",
-    label: "Cone",
-    heading: "Infinite cone",
-    title: "Add an infinite double cone surface along X, Y or Z",
-    items: surfaceItems("cone", "cone"),
+    id: "surface-others",
+    iconName: "more",
+    label: "Others",
+    title: "Less common surfaces: infinite cones and tori along X, Y or Z",
+    items: [{ heading: "Infinite cone" }, ...surfaceItems("cone", "cone"), { heading: "Torus" }, ...surfaceItems("torus", "torus")],
   }),
-  h("button", { class: "tb", id: "surface-sphere", title: "Add a sphere surface", onclick: () => run(addSurface, "sphere") }, icon("sphere"), h("span", { class: "label" }, "Sphere")),
+);
+
+// ---- Shapes group: finite regions. Cube, sphere and cylinder up front; the
+// cone and OpenMC's composite surfaces (openmc.model.*) under Others.
+for (const kind of ["cube", "sphere", "cylinder"]) {
+  const def = PRIMITIVES[kind];
+  $("primitives").append(
+    h(
+      "button",
+      { class: "tb", title: `Add a finite ${def.label.toLowerCase()} (inside the selected operation or cell, if any)`, onclick: () => run(addPrimitive, kind) },
+      icon(kind),
+      h("span", { class: "label" }, def.label),
+    ),
+  );
+}
+$("primitives").append(
   flyoutButton({
-    id: "surface-torus",
-    iconName: "torus",
-    label: "Torus",
-    heading: "Torus",
-    title: "Add a torus surface around X, Y or Z",
-    items: surfaceItems("torus", "torus"),
+    id: "shape-others",
+    iconName: "more",
+    label: "Others",
+    title: "More shapes: a finite cone and OpenMC's composite surfaces (cylinder sector, hexagonal prism, polygon, …)",
+    items: [
+      { label: "Cone", iconName: "cone", title: "Add a finite cone (inside the selected operation or cell, if any)", run: () => addPrimitive("cone") },
+      { heading: "OpenMC composites" },
+      ...Object.entries(COMPOSITE_TYPES).map(([type, def]) => ({ label: def.label, title: `${def.description} (openmc.model.${def.openmc})`, run: () => addComposite(type) })),
+    ],
   }),
 );
 
@@ -2516,17 +2530,7 @@ $("operations-more").append(
   h("button", { class: "tb", id: "duplicate", title: "Duplicate the selection (Ctrl+D)", onclick: () => run(duplicateSelection) }, icon("duplicate"), h("span", { class: "label" }, "Duplicate")),
   h("button", { class: "tb", id: "reference", title: "Reuse the selected regions elsewhere: adds live references (R)", onclick: () => run(addReferences) }, icon("ref"), h("span", { class: "label" }, "Reference")),
 );
-// Composite surfaces (openmc.model.*): several surfaces combined into one region.
-$("composites").append(
-  flyoutButton({
-    id: "composite-toggle",
-    iconName: "composite",
-    label: "Composite",
-    heading: "Composite surfaces",
-    title: "Add an OpenMC composite surface (cylinder sector, hexagonal prism, polygon, …)",
-    items: Object.entries(COMPOSITE_TYPES).map(([type, def]) => ({ label: def.label, title: `${def.description} (openmc.model.${def.openmc})`, run: () => addComposite(type) })),
-  }),
-);
+
 
 
 $("tree-actions").append(
@@ -3037,9 +3041,9 @@ function renderTutorial() {
     h(
       "ul",
       {},
-      h("li", {}, "Use the ", b("Geometry"), " ribbon at the top: ", b("Shapes"), " are finite (cube, sphere, cylinder, cone); ", b("Surfaces"), " add an OpenMC surface (planes, infinite cylinders and cones, spheres, tori), listed under ", b("Surfaces"), " in the scene tree."),
+      h("li", {}, "Use the ", b("Geometry"), " ribbon at the top: ", b("Surfaces"), " add an OpenMC surface (planes, spheres, infinite cylinders; cones and tori under ", b("Others"), "), listed under ", b("Surfaces"), " in the scene tree; ", b("Shapes"), " are finite regions (cube, sphere, cylinder; a cone and OpenMC composites under ", b("Others"), ")."),
       h("li", {}, "A surface is not a region yet: select it, then press ", b("Half-space"), " (above the scene tree) to use one of its sides. Several half-spaces can share a surface."),
-      h("li", {}, b("Composite ▸"), " adds OpenMC composite surfaces: hexagonal prisms, cylinder sectors, polygons, vessels and more."),
+      h("li", {}, b("Shapes → Others"), " also has OpenMC composite surfaces: hexagonal prisms, cylinder sectors, polygons, vessels and more."),
       h("li", {}, "With one operation, cell or universe selected, new shapes go inside it."),
       h("li", {}, "Edit sizes, surface coefficients and position/rotation/scale in the ", b("Properties"), " panel on the right."),
     ),

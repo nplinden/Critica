@@ -65,11 +65,11 @@ npm run demo    # builder at http://localhost:1948/
 
 - **Ribbon**: the *Geometry* and *Materials* tabs at the top each have a
   ribbon of tools (collapsible with ▴ or a double-click on the tab). The
-  *Geometry* ribbon groups the tools: *Shapes* adds
-  finite cubes, spheres, cylinders and cones; *Surfaces* adds a bare OpenMC surface
-  (no region yet): *Plane ▸* (X, Y, Z or arbitrary), infinite *Cylinder ▸* and
-  *Cone ▸* (X, Y, Z), *Sphere*, *Torus ▸* (X, Y, Z); *Composite ▸* adds OpenMC
-  composite surfaces; *Combine* has Union, Subtract, Intersect, Complement,
+  *Geometry* ribbon groups the tools: *Surfaces* adds a bare OpenMC surface
+  (no region yet): *Plane ▾* (X, Y, Z or arbitrary), *Sphere*, infinite
+  *Cylinder ▾* (X, Y, Z), and *Others ▾* for infinite cones and tori (X, Y, Z);
+  *Shapes* adds finite regions: *Cube*, *Sphere*, *Cylinder*, and *Others ▾*
+  for a cone and OpenMC's composite surfaces; *Combine* has Union, Subtract, Intersect, Complement,
   Ungroup, Duplicate and Reference; *View* has Cutaway, the By material, Void,
   World box, Isolate and X-ray toggles, and Fit. The *Materials* ribbon has
   New, Library…, Duplicate and Delete. When one operation, cell or universe is selected,
@@ -160,7 +160,7 @@ recomputes that node and its ancestors, and undo is instant.
   (above the scene tree) makes a region from one side of it, *Cell* wraps a region into a
   cell with a material or universe fill, and *Universe* adds a universe.
   Builder primitives can be mixed in; they export as exact analytic surfaces.
-- *Composite* (ribbon) adds any of OpenMC's composite surfaces
+- *Shapes → Others ▾* (ribbon) adds any of OpenMC's composite surfaces
   (cylinder sector, hexagonal and rectangular prisms with rounded corners,
   polygon, vessel, …) as one parametric node with an inside/outside side.
   A selected cylinder sector shows construction lines inside its hole
