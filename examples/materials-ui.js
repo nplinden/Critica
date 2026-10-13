@@ -21,6 +21,7 @@ import { serializeXML } from "./openmc/xml.js";
 const $ = (id) => document.getElementById(id);
 const sig = (v, n = 6) => (v == null || !Number.isFinite(v) ? "—" : Math.abs(v) !== 0 && (Math.abs(v) < 1e-3 || Math.abs(v) >= 1e5) ? v.toExponential(n - 1) : String(Number(v.toPrecision(n))));
 const pct = (v) => (v == null ? "—" : `${sig(v * 100, 5)} %`);
+let advancedOpen = false; // the material editor's Advanced section
 const UNIT_LABELS = { "g/cm3": "g/cm³", "kg/m3": "kg/m³", "atom/b-cm": "atom/b-cm", "atom/cm3": "atom/cm³", sum: "sum of components" };
 
 /**
@@ -161,7 +162,6 @@ export function createMaterialsWorkspace(ctx) {
           "div",
           { class: "section" },
           field("Name", text("name", m.name)),
-          field("ID", num("id", m.id, { min: 1, step: 1 }), "Referenced by cells (material=\"…\")"),
           field(
             "Color",
             h(
@@ -217,8 +217,10 @@ export function createMaterialsWorkspace(ctx) {
         ),
         h(
           "details",
-          { class: "section advanced", open: Boolean(m.isotropic.length) },
+          // Stays open across re-renders (e.g. after changing the id) once opened.
+          { class: "section advanced", open: advancedOpen || m.isotropic.length > 0, ontoggle: (e) => (advancedOpen = e.target.open) },
           h("summary", {}, "Advanced"),
+          field("ID", num("id", m.id, { min: 1, step: 1 }), "Assigned automatically; cells reference it (material=\"…\"). Changing it updates those cells."),
           field("Isotropic", text("isotropic", m.isotropic.join(" "), { placeholder: "nuclides, space separated" }), "Nuclides with isotropic-in-lab elastic scattering"),
         ),
       );
