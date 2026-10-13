@@ -1,7 +1,8 @@
 // Small WebGL2 mesh viewer shared by the builder and the script playground.
 //
 //   const viewer = createViewer(canvas, { onPick(tag, event) {} });
-//   viewer.setMesh(mesh, colors);   // mesh from Solid.toMesh(), colors: rgb per vertex
+//   viewer.setMesh(mesh, colors, open);  // mesh from Solid.toMesh(), colors: rgb per vertex,
+//                                   // open: optional 1/0 per vertex for faces drawn as open sides
 //   viewer.setGhost(mesh | null);   // translucent x-ray overlay
 //   viewer.fit(bounds);
 //   viewer.setUp("z");              // which model axis points up on screen ("y" default)
@@ -15,18 +16,18 @@
 // A click (press without dragging) reports the tag under the cursor (0 = none).
 
 const VS = `#version 300 es
-in vec3 aPos; in vec3 aNormal; in vec3 aColor; in float aTag;
+in vec3 aPos; in vec3 aNormal; in vec3 aColor; in float aTag; in float aOpen;
 uniform mat4 uMvp; uniform mat4 uView; uniform mat4 uModel;
-out vec3 vNormal; out vec3 vColor; out vec3 vPos; flat out float vTag;
+out vec3 vNormal; out vec3 vColor; out vec3 vPos; flat out float vTag; out float vOpen;
 void main() {
-  vNormal = mat3(uView) * mat3(uModel) * aNormal; vColor = aColor; vTag = aTag; vPos = aPos;
+  vNormal = mat3(uView) * mat3(uModel) * aNormal; vColor = aColor; vTag = aTag; vPos = aPos; vOpen = aOpen;
   gl_Position = uMvp * uModel * vec4(aPos, 1.0);
 }`;
 
 const FS = `#version 300 es
 precision highp float;
-in vec3 vNormal; in vec3 vColor; in vec3 vPos; flat in float vTag;
-uniform int uMode; uniform vec4 uTint;
+in vec3 vNormal; in vec3 vColor; in vec3 vPos; flat in float vTag; in float vOpen;
+uniform int uMode; uniform vec4 uTint; uniform vec3 uBg;
 uniform int uClipN; uniform vec4 uClip[3];
 out vec4 outColor;
 // Cutaway: the removed region is the intersection of the half-spaces n·p > d.
@@ -64,7 +65,14 @@ void main() {
   float fill = max(dot(n, normalize(vec3(-0.6, -0.2, 0.4))), 0.0) * 0.3;
   float rim = pow(1.0 - abs(n.z), 2.0);
   if (uMode == 2) { outColor = vec4(uTint.rgb * (0.5 + 0.5 * key) , uTint.a * (0.5 + rim)); return; }
-  outColor = vec4(vColor * (0.22 + 0.75 * key + fill), 1.0);
+  vec3 lit = vColor * (0.22 + 0.75 * key + fill);
+  if (uMode == 0 && vOpen > 0.5) {
+    // Open side: the region goes on past the world box, which only cuts it for
+    // display. Faded, with wide diagonal stripes, so it doesn't read as a wall.
+    float stripe = step(0.5, fract((gl_FragCoord.x - gl_FragCoord.y) / 18.0));
+    lit = mix(lit, uBg, mix(0.5, 0.78, stripe));
+  }
+  outColor = vec4(lit, 1.0);
 }`;
 
 const mul = (a, b) => {
@@ -125,12 +133,13 @@ export function createViewer(canvas, { onPick, theme: initialTheme = "dark", gri
   gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FS));
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
-  const u = Object.fromEntries(["uMvp", "uView", "uModel", "uMode", "uTint", "uClipN", "uClip"].map((n) => [n, gl.getUniformLocation(prog, n)]));
+  const u = Object.fromEntries(["uMvp", "uView", "uModel", "uMode", "uTint", "uClipN", "uClip", "uBg"].map((n) => [n, gl.getUniformLocation(prog, n)]));
   const attribs = [
     ["aPos", 3],
     ["aNormal", 3],
     ["aColor", 3],
     ["aTag", 1],
+    ["aOpen", 1],
   ];
 
   // A drawable: VAO + one buffer per attribute + optional index buffer.
@@ -173,7 +182,7 @@ export function createViewer(canvas, { onPick, theme: initialTheme = "dark", gri
     };
   };
 
-  const solid = makeDrawable(["aPos", "aNormal", "aColor", "aTag"]);
+  const solid = makeDrawable(["aPos", "aNormal", "aColor", "aTag", "aOpen"]);
   const ghost = makeDrawable(["aPos", "aNormal"]);
   const lines = makeDrawable(["aPos", "aColor"]);
   // Gizmos: translucent plane sheets, their outlines, and 3D arrows.
@@ -269,10 +278,26 @@ export function createViewer(canvas, { onPick, theme: initialTheme = "dark", gri
     applyClip();
     gl.uniformMatrix4fv(u.uModel, false, model);
     gl.uniform1i(u.uMode, mode);
+    gl.uniform3fv(u.uBg, theme.background);
     gl.bindVertexArray(solid.vao);
     if (!solid.count) return;
+    // Open sides lie on the world box, where finite content often has real
+    // faces too: push them back so the real faces win the depth test.
+    const closed = solid.openStart ?? solid.count;
+    drawRange(0, closed);
+    if (closed < solid.count) {
+      gl.enable(gl.POLYGON_OFFSET_FILL);
+      gl.polygonOffset(2, 8);
+      drawRange(closed, solid.count - closed, true);
+      gl.disable(gl.POLYGON_OFFSET_FILL);
+    }
+  }
+
+  function drawRange(first, count, offset = false) {
+    const at = first * 4;
+    if (!count) return;
     if (!clipPlanes.length) {
-      gl.drawElements(gl.TRIANGLES, solid.count, gl.UNSIGNED_INT, 0);
+      gl.drawElements(gl.TRIANGLES, count, gl.UNSIGNED_INT, at);
       return;
     }
     // With a cutaway, the insides of cut solids (back faces) act as section
@@ -281,12 +306,13 @@ export function createViewer(canvas, { onPick, theme: initialTheme = "dark", gri
     // nudged toward the camera, so the cut cell wins instead of z-fighting.
     gl.enable(gl.CULL_FACE);
     gl.cullFace(gl.BACK);
-    gl.drawElements(gl.TRIANGLES, solid.count, gl.UNSIGNED_INT, 0);
+    gl.drawElements(gl.TRIANGLES, count, gl.UNSIGNED_INT, at);
     gl.cullFace(gl.FRONT);
     gl.enable(gl.POLYGON_OFFSET_FILL);
     gl.polygonOffset(-1, -4);
-    gl.drawElements(gl.TRIANGLES, solid.count, gl.UNSIGNED_INT, 0);
-    gl.disable(gl.POLYGON_OFFSET_FILL);
+    gl.drawElements(gl.TRIANGLES, count, gl.UNSIGNED_INT, at);
+    if (offset) gl.polygonOffset(2, 8);
+    else gl.disable(gl.POLYGON_OFFSET_FILL);
     gl.cullFace(gl.BACK);
     gl.disable(gl.CULL_FACE);
   }
@@ -510,16 +536,28 @@ export function createViewer(canvas, { onPick, theme: initialTheme = "dark", gri
   new ResizeObserver(redraw).observe(canvas);
 
   return {
-    /** Uploads a mesh. `colors` is rgb per vertex (defaults to a neutral blue). */
-    setMesh(mesh, colors) {
+    /** Uploads a mesh. `colors` is rgb per vertex (defaults to a neutral blue); `open` flags open-side vertices. */
+    setMesh(mesh, colors, open) {
       const n = mesh.positions.length / 3;
       if (!colors) {
         colors = new Float32Array(n * 3);
         for (let i = 0; i < n; i++) colors.set([0.42, 0.71, 1.0], i * 3);
       }
+      // Closed triangles first, then open ones (drawn with a depth offset).
+      let indices = mesh.indices;
+      solid.openStart = undefined;
+      if (open) {
+        const closed = [];
+        const opened = [];
+        for (let t = 0; t < indices.length; t += 3) (open[indices[t]] ? opened : closed).push(indices[t], indices[t + 1], indices[t + 2]);
+        if (opened.length) {
+          indices = Uint32Array.from([...closed, ...opened]);
+          solid.openStart = closed.length;
+        }
+      }
       solid.upload(
-        { aPos: mesh.positions, aNormal: mesh.normals, aColor: colors, aTag: Float32Array.from(mesh.tags) },
-        mesh.indices,
+        { aPos: mesh.positions, aNormal: mesh.normals, aColor: colors, aTag: Float32Array.from(mesh.tags), aOpen: open ?? new Float32Array(n) },
+        indices,
       );
       redraw();
     },

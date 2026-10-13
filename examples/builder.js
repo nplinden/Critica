@@ -406,14 +406,65 @@ function planeGizmo(node, color, frame) {
   };
 }
 
+/**
+ * Directions in which the item `id` (or its cell `tag`) is unbounded, as
+ * [axis][0 = min side, 1 = max side]. Its faces on those sides of the world box
+ * are not real boundaries: the world box only cuts the region for display.
+ */
+function openDirections(id, tag) {
+  const w = results.world;
+  // Bounds are in the item's own frame: only use them where that is the world frame.
+  const m = rootMatrixOf(id);
+  if (!w || !m || m.some((v, i) => Math.abs(v - IDENTITY[i]) > 1e-12)) return null;
+  const boxes = [scene.regionBounds(nodeById.get(id))];
+  const cell = tag && tag !== id ? nodeById.get(tag) : null;
+  if (cell && isCell(cell) && rootMatrixOf(tag)) boxes.push(scene.regionBounds(cell));
+  const dirs = [0, 1, 2].map((k) => [boxes.every((b) => b.min[k] === -Infinity), boxes.every((b) => b.max[k] === Infinity)]);
+  return dirs.some((d) => d[0] || d[1]) ? dirs : null;
+}
+
+/** Per-vertex 1/0: whether the vertex belongs to a face lying on an open side of the world box. */
+function openSides(mesh, dirs) {
+  const flags = new Float32Array(mesh.tags.length);
+  if (!dirs) return flags;
+  const w = results.world;
+  const p = mesh.positions;
+  const idx = mesh.indices;
+  const eps = 1e-6 * Math.max(1, ...w.max.map((v, i) => v - w.min[i]));
+  const on = (vi, k, x) => Math.abs(p[vi * 3 + k] - x) < eps;
+  for (let t = 0; t < idx.length; t += 3) {
+    const [a, b, c] = [idx[t], idx[t + 1], idx[t + 2]];
+    for (let k = 0; k < 3; k++) {
+      const hit = [w.min[k], w.max[k]].some((x, side) => dirs[k][side] && on(a, k, x) && on(b, k, x) && on(c, k, x));
+      if (hit) {
+        flags[a] = flags[b] = flags[c] = 1;
+        break;
+      }
+    }
+  }
+  return flags;
+}
+
 function renderViewport(fit) {
   const visibleIds = isolate && selection.length ? selection : scene.roots.filter((n) => n.enabled).map((n) => n.id);
   // Plane half-spaces shown on their own (top level, isolated or selected) are
   // drawn as a sheet with arrows instead of half the world box.
   const asPlane = new Set([...visibleIds, ...selection].filter((id) => isPlaneHalfspace(nodeById.get(id)) && nodeById.get(id).enabled && rootMatrixOf(id)));
   const keep = (p) => showVoid || !p.tag || !isVoidCell(nodeById.get(p.tag) ?? {});
-  const meshes = visibleIds.filter((id) => !asPlane.has(id)).flatMap((id) => partsOf(id).filter(keep).map((p) => meshOf(p.solid))).filter(Boolean);
+  const meshes = [];
+  const openFlags = [];
+  for (const id of visibleIds) {
+    if (asPlane.has(id)) continue;
+    for (const p of partsOf(id).filter(keep)) {
+      const m = meshOf(p.solid);
+      if (!m) continue;
+      meshes.push(m);
+      openFlags.push(openSides(m, openDirections(id, p.tag)));
+    }
+  }
   const mesh = mergeMeshes(meshes);
+  const open = new Float32Array(mesh.tags.length);
+  openFlags.reduce((at, f) => (open.set(f, at), at + f.length), 0);
 
   const hl = highlightedTags();
   const colors = new Float32Array(mesh.positions.length);
@@ -430,7 +481,7 @@ function renderViewport(fit) {
     colors[i * 3 + 1] = c[1];
     colors[i * 3 + 2] = c[2];
   }
-  viewer.setMesh(mesh, colors);
+  viewer.setMesh(mesh, colors, open);
   renderLegend(colorCache.keys());
 
   // Ghost the selected nodes that are not directly visible (cutters, void cells, universe content).

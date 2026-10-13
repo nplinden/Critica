@@ -128,8 +128,12 @@ recomputes that node and its ancestors, and undo is instant.
   They export as the primitive surfaces OpenMC would generate, and
   *Expand to half-spaces* turns one into editable half-spaces.
 - Infinite half-spaces are drawn inside a world box, auto-fitted to the
-  bounded content (or set manually in *Settings*). OpenMC models
-  display Z-up.
+  bounded content (or set manually in *Settings*). Faces that only exist
+  because the world box cuts an unbounded region (the four sides of a slab
+  between two planes, the ends of an infinite cylinder) are drawn faded with
+  diagonal stripes: the region goes on past them. A plane half-space shown on
+  its own is drawn as a sheet with arrows pointing into the kept side.
+  OpenMC models display Z-up.
 - Not displayed yet: lattices and DAGMC universes. They are kept verbatim and
   written back on export, and cells filled with them are drawn as grey
   placeholders.
