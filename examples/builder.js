@@ -2095,19 +2095,23 @@ function pickTarget(tag, leaf, toLeaf, point) {
   let end = inside ? leaf : tag;
   const pathTo = (id) => [...scene.ancestors(id).reverse(), id].filter((a) => !isUniverse(scene.find(a).node));
   let path = pathTo(end);
-  const current = selection.length === 1 ? path.indexOf(selection[0]) : -1;
-  if (!toLeaf && current < 0) return path[0];
-  // Stepping down: coplanar faces keep the tag of one operand only (all six
-  // faces of a box of half-spaces may say "first plane"), so find the leaf
+  const sel = selection.length === 1 ? selection[0] : null;
+  const inRegion = sel != null && (sel === path[0] || scene.isDescendant(sel, path[0]));
+  if (!toLeaf && !inRegion) return path[0];
+  // Coplanar faces keep the tag of one operand only (all six faces of a box of
+  // half-spaces may say "first plane"), so find the leaf of the whole region
   // whose surface the clicked point is actually on.
-  const better = closestLeaf(path[Math.max(current, 0)], end, point());
-  if (better !== end) {
-    end = better;
+  const real = closestLeaf(path[0], end, point());
+  if (real !== end) {
+    end = real;
     path = pathTo(end);
   }
   if (toLeaf) return end;
-  const at = path.indexOf(selection[0]);
-  return path[Math.min(at + 1, path.length - 1)];
+  const at = path.indexOf(sel);
+  if (at >= 0) return path[Math.min(at + 1, path.length - 1)]; // inside the selection: one level down
+  // Another branch of the same region (a sibling face): same depth there.
+  const depth = pathTo(sel).length - 1;
+  return path[Math.min(depth, path.length - 1)];
 }
 
 /** Model-space point where the pointer ray first meets the displayed mesh, or null. */
