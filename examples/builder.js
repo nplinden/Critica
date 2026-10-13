@@ -22,7 +22,7 @@ import { SURFACE_TYPES, BOUNDARY_TYPES } from "./openmc/surfaces.js";
 import { compositeExpansion, isIdentity } from "./scene.js";
 import { importOpenMC, importMaterialsXML } from "./openmc/import.js";
 import { exportOpenMC, exportMaterialsXML, primitiveSurfaces } from "./openmc/export.js";
-import { transformSurface, toForm, transformForm, isPlane } from "./openmc/surfaces.js";
+import { transformSurface, toForm, transformForm, isPlane, evaluate as evaluateSurface } from "./openmc/surfaces.js";
 import { fromTransform, multiply, IDENTITY } from "./mat4.js";
 import { createMaterialsWorkspace } from "./materials-ui.js";
 import { COMPOSITE_TYPES } from "./openmc/composite.js";
@@ -477,6 +477,91 @@ function openSides(mesh, dirs) {
   return flags;
 }
 
+const PLUS_COLOR = [0.95, 0.42, 0.32];
+const MINUS_COLOR = [0.32, 0.6, 0.98];
+
+/**
+ * Evenly spread points of a shell with their unit normals, spaced for about
+ * forty over its area: points are taken across each triangle (long strips, like a
+ * cylinder's sides, get several), and one is kept only when no kept point is
+ * closer than the spacing. Returns { samples: [{ p, n }], spacing }.
+ */
+function shellSamples(m, indices) {
+  const P = m.positions;
+  const N = m.normals;
+  const at = (arr, v) => [arr[v * 3], arr[v * 3 + 1], arr[v * 3 + 2]];
+  let area = 0;
+  for (let t = 0; t < indices.length; t += 3) {
+    const [a, b, c] = [indices[t], indices[t + 1], indices[t + 2]].map((v) => at(P, v));
+    const e1 = b.map((x, k) => x - a[k]);
+    const e2 = c.map((x, k) => x - a[k]);
+    area += Math.hypot(e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]) / 2;
+  }
+  const spacing = Math.sqrt(area / 40) || 1;
+  const grid = new Map(); // cell → kept points
+  const cellOf = (p) => p.map((x) => Math.floor(x / spacing));
+  const farEnough = (p) => {
+    const [cx, cy, cz] = cellOf(p);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (let k = -1; k <= 1; k++)
+      for (const q of grid.get(`${cx + i},${cy + j},${cz + k}`) ?? []) if (Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) < spacing) return false;
+    return true;
+  };
+  const samples = [];
+  for (let t = 0; t < indices.length; t += 3) {
+    const [a, b, c] = [indices[t], indices[t + 1], indices[t + 2]].map((v) => ({ p: at(P, v), n: at(N, v) }));
+    const edge = Math.max(...[[a, b], [b, c], [c, a]].map(([x, y]) => Math.hypot(...x.p.map((q, k) => q - y.p[k]))));
+    const steps = Math.min(40, Math.max(1, Math.ceil((2 * edge) / spacing)));
+    for (let i = 0; i <= steps; i++)
+      for (let j = 0; i + j <= steps; j++) {
+        const wb = (i + 1 / 3) / (steps + 1);
+        const wc = (j + 1 / 3) / (steps + 1);
+        const wa = 1 - wb - wc;
+        if (wa < 0) continue;
+        const p = [0, 1, 2].map((k) => wa * a.p[k] + wb * b.p[k] + wc * c.p[k]);
+        if (!farEnough(p)) continue;
+        const n = [0, 1, 2].map((k) => wa * a.n[k] + wb * b.n[k] + wc * c.n[k]);
+        const len = Math.hypot(...n);
+        if (!(len > 0)) continue;
+        samples.push({ p, n: n.map((x) => x / len) });
+        const key = cellOf(p).join(",");
+        if (!grid.has(key)) grid.set(key, []);
+        grid.get(key).push(p);
+      }
+  }
+  return { samples, spacing };
+}
+
+/**
+ * Small + signs on the positive side of a surface and − signs on its negative
+ * side, just off each sample point. The side is read from the surface
+ * equation, so it holds whatever way the mesh normals face.
+ */
+function sideMarks(surface, input, spacing, tag) {
+  const { samples, spacing: sp } = Array.isArray(input) ? { samples: input, spacing } : input;
+  const size = sp * 0.3;
+  const off = sp * 0.1;
+  const out = [];
+  for (const { p, n } of samples) {
+    const ahead = p.map((x, k) => x + n[k] * off);
+    let f;
+    try {
+      f = evaluateSurface(surface, ahead);
+    } catch {
+      continue;
+    }
+    if (!Number.isFinite(f)) continue;
+    const toPlus = f >= 0 ? n : n.map((x) => -x);
+    const helper = Math.abs(n[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+    const u0 = [n[1] * helper[2] - n[2] * helper[1], n[2] * helper[0] - n[0] * helper[2], n[0] * helper[1] - n[1] * helper[0]];
+    const ul = Math.hypot(...u0);
+    const u = u0.map((x) => x / ul);
+    for (const [sign, dir] of [[true, toPlus], [false, toPlus.map((x) => -x)]]) {
+      out.push({ center: p.map((x, k) => x + dir[k] * off), normal: dir, u, size, plus: sign, color: sign ? PLUS_COLOR : MINUS_COLOR, tag });
+    }
+  }
+  return out;
+}
+
 function renderViewport(fit) {
   const visibleIds = isolate && selection.length ? selection : scene.roots.filter((n) => n.enabled).map((n) => n.id);
   // Plane half-spaces shown on their own (top level, isolated or selected) are
@@ -535,6 +620,7 @@ function renderViewport(fit) {
   // inside without its faces on the world box.
   const surfaces = [];
   const shellPoints = [];
+  const marks = [];
   displayed.forEach((d, i) => {
     const tag = SURFACE_TAG + i;
     const color = d.key === surfaceSel ? HIGHLIGHT : surfaceColor(d);
@@ -543,7 +629,11 @@ function renderViewport(fit) {
       const len = Math.hypot(a, b, c);
       if (!(len > 0)) return;
       const n = [a / len, b / len, c / len];
-      planes.push({ polygon: planeSquare(n, -e / len, frame).polygon, normal: n, color, tag });
+      const sq = planeSquare(n, -e / len, frame);
+      planes.push({ polygon: sq.polygon, normal: n, color, tag });
+      const samples = [];
+      for (const a of [-0.6, 0, 0.6]) for (const b of [-0.6, 0, 0.6]) samples.push({ p: sq.at(a, b), n });
+      marks.push(...sideMarks(d.surface, samples, (frame.half * 2) / 5, tag));
       return;
     }
     const m = meshOf(results.surfaces?.get(d.key));
@@ -553,9 +643,10 @@ function renderViewport(fit) {
     for (let t = 0; t < m.indices.length; t += 3) if (!onBox[m.indices[t]]) indices.push(m.indices[t], m.indices[t + 1], m.indices[t + 2]);
     if (!indices.length) return;
     surfaces.push({ positions: m.positions, normals: m.normals, indices, color, tag });
+    marks.push(...sideMarks(d.surface, shellSamples(m, indices), null, tag));
     for (const v of indices) shellPoints.push([m.positions[v * 3], m.positions[v * 3 + 1], m.positions[v * 3 + 2]]);
   });
-  viewer.setGizmos({ planes, arrows, surfaces });
+  viewer.setGizmos({ planes, arrows, surfaces, marks });
   // Fit should frame the sheets and shells too.
   const sheetPoints = [...planes.flatMap((p) => p.polygon), ...shellPoints];
   const ghostMeshes = ghostIds.flatMap((id) => partsOf(id).map((p) => meshOf(p.solid))).filter(Boolean);

@@ -9,7 +9,8 @@
 //   viewer.setTheme("light");       // background and grid colors: "dark" (default) or "light"
 //   viewer.setGizmos({ planes, arrows, surfaces });  // plane sheets, 3D arrows and translucent
 //       surface shells (model coordinates): planes: [{ polygon: [[x,y,z]…], normal, color, tag }],
-//       arrows: [{ from, dir, length, color, tag }], surfaces: [{ positions, normals, indices, color, tag }]
+//       arrows: [{ from, dir, length, color, tag }], surfaces: [{ positions, normals, indices, color, tag }],
+//       marks: [{ center, normal, u, size, plus, color, tag }] (flat + / − signs; u = in-plane direction)
 //   viewer.setClip(planes);         // cutaway: hide the region where n·p > d for every plane
 //                                   // (0–3 planes {n, d}, model coordinates); [] shows everything
 //
@@ -190,6 +191,7 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
   // Gizmos: translucent plane sheets, their outlines, and 3D arrows.
   const gizmoSheets = makeDrawable(["aPos", "aNormal", "aColor", "aTag"]);
   const gizmoArrows = makeDrawable(["aPos", "aNormal", "aColor", "aTag"]);
+  const gizmoMarks = makeDrawable(["aPos", "aNormal", "aColor", "aTag"]); // + / − signs, seen from their side only
   const gizmoLines = makeDrawable(["aPos", "aColor"]);
   let gizmoLineCount = 0;
   let lineCount = 0;
@@ -366,7 +368,7 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
 
   /** Arrows (opaque, shaded), sheet outlines, then translucent sheets. Mode 1 = picking. */
   function drawGizmos(mode) {
-    if (!gizmoArrows.count && !gizmoSheets.count) return;
+    if (!gizmoArrows.count && !gizmoSheets.count && !gizmoMarks.count) return;
     gl.useProgram(prog);
     applyClip();
     gl.uniformMatrix4fv(u.uModel, false, model);
@@ -374,6 +376,14 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
       gl.uniform1i(u.uMode, mode === 1 ? 1 : 0);
       gl.bindVertexArray(gizmoArrows.vao);
       gl.drawElements(gl.TRIANGLES, gizmoArrows.count, gl.UNSIGNED_INT, 0);
+    }
+    if (gizmoMarks.count) {
+      gl.uniform1i(u.uMode, mode === 1 ? 1 : 0);
+      gl.enable(gl.CULL_FACE);
+      gl.cullFace(gl.BACK);
+      gl.bindVertexArray(gizmoMarks.vao);
+      gl.drawElements(gl.TRIANGLES, gizmoMarks.count, gl.UNSIGNED_INT, 0);
+      gl.disable(gl.CULL_FACE);
     }
     if (mode === 1) {
       if (gizmoSheets.count) {
@@ -407,6 +417,26 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
       gl.disable(gl.BLEND);
     }
     gl.bindVertexArray(null);
+  }
+
+  /** A flat sign lying in the plane (u, n × u) at `center`, visible from the `normal` side: a bar along u, plus one across for "+". */
+  function markMesh({ center, normal, u, size, plus, color, tag = 0 }, out) {
+    const v = cross(normal, u);
+    const bar = (a, b) => {
+      const base = out.pos.length / 3;
+      const w = size * 0.14;
+      for (const [s, t] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        out.pos.push(...center.map((c, i) => c + a[i] * s * size * 0.5 + b[i] * t * w));
+        out.nrm.push(...normal);
+        out.col.push(...color);
+        out.tag.push(tag);
+      }
+      // Counter-clockwise seen from the normal's side, so culling hides the back.
+      if (dot(cross(a, b), normal) >= 0) out.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+      else out.idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
+    };
+    bar(u, v);
+    if (plus) bar(v, u);
   }
 
   /** Triangle mesh of an arrow: shaft cylinder + cone head, along unit `dir`. */
@@ -465,7 +495,7 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
   let colorRb = null;
   let depthRb = null;
   function pick(clientX, clientY) {
-    if (!solid.count && !gizmoSheets.count && !gizmoArrows.count) return 0;
+    if (!solid.count && !gizmoSheets.count && !gizmoArrows.count && !gizmoMarks.count) return 0;
     const [w, h] = resize();
     if (!fbo || fboSize[0] !== w || fboSize[1] !== h) {
       fbo ??= gl.createFramebuffer();
@@ -577,7 +607,7 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
       redraw();
     },
     /** Plane sheets (with outlines), 3D arrows and surface shells, in model coordinates; tags make them pickable. */
-    setGizmos({ planes = [], arrows = [], surfaces = [] } = {}) {
+    setGizmos({ planes = [], arrows = [], surfaces = [], marks = [] } = {}) {
       const sheet = { pos: [], nrm: [], col: [], tag: [], idx: [] };
       const outline = { pos: [], col: [] };
       for (const p of planes) {
@@ -607,10 +637,13 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
       }
       const arrow = { pos: [], nrm: [], col: [], tag: [], idx: [] };
       for (const a of arrows) arrowMesh(a.from, a.dir, a.length, a.color, a.tag ?? 0, arrow);
+      const mark = { pos: [], nrm: [], col: [], tag: [], idx: [] };
+      for (const m of marks) markMesh(m, mark);
       const upload = (d, m) =>
         d.upload({ aPos: new Float32Array(m.pos), aNormal: new Float32Array(m.nrm), aColor: new Float32Array(m.col), aTag: new Float32Array(m.tag) }, new Uint32Array(m.idx));
       upload(gizmoSheets, sheet);
       upload(gizmoArrows, arrow);
+      upload(gizmoMarks, mark);
       gizmoLines.upload({ aPos: new Float32Array(outline.pos), aColor: new Float32Array(outline.col) });
       gizmoLineCount = outline.pos.length / 3;
       redraw();
