@@ -157,10 +157,88 @@ export function regionBounds(ast, surfaces, negated = false) {
     case "or": {
       const conj = (ast.op === "and") !== negated;
       const boxes = ast.args.map((a) => regionBounds(a, surfaces, negated));
-      return boxes.reduce(conj ? intersectBoxes : unionBoxes);
+      const box = boxes.reduce(conj ? intersectBoxes : unionBoxes);
+      if (!conj) return box;
+      const planes = ast.args
+        .filter((a) => a.op === "half")
+        .map((a) => linearConstraint(surfaces.get(a.surface), negated ? (a.sense === "-" ? "+" : "-") : a.sense))
+        .filter(Boolean);
+      return refineByPlanes(box, planes);
     }
   }
   return infiniteBox();
+}
+
+/** A plane half-space as { n, d } meaning n·p ≤ d, or null for other surfaces. */
+export function linearConstraint(s, sense) {
+  if (!s) return null;
+  const c = s.coeffs;
+  let n;
+  let d;
+  if (s.type === "plane") {
+    n = [c[0], c[1], c[2]];
+    d = c[3];
+  } else if (s.type === "x-plane" || s.type === "y-plane" || s.type === "z-plane") {
+    n = [0, 0, 0];
+    n["xyz".indexOf(s.type[0])] = 1;
+    d = c[0];
+  } else return null;
+  // f = n·p − d; the negative side is n·p < d.
+  return sense === "-" ? { n, d } : { n: n.map((v) => -v), d: -d };
+}
+
+/**
+ * Tightens `box` (the bounds of an intersection) with the exact bounds of the
+ * polyhedron cut by `planes` ({ n, d }: n·p ≤ d) inside it. Per-surface bounds
+ * know nothing of oblique planes, so a hexagonal prism (two axis planes, four
+ * oblique ones) would otherwise look unbounded across its flats. Corners are
+ * where three planes meet inside all the others; an axis stays infinite when
+ * the polyhedron reaches the far stand-in walls.
+ */
+export function refineByPlanes(box, planes) {
+  if (planes.length < 2 || box.min.some((v, k) => v > box.max[k])) return box;
+  const finite = [...box.min, ...box.max].filter(Number.isFinite);
+  const scale = Math.max(1, ...finite.map(Math.abs), ...planes.map((p) => Math.abs(p.d) / (Math.hypot(...p.n) || 1)));
+  const L = 1e6 * scale; // stand-in for infinity
+  const all = planes.map((p) => {
+    const len = Math.hypot(...p.n);
+    return { n: p.n.map((v) => v / len), d: p.d / len };
+  });
+  for (let k = 0; k < 3; k++) {
+    const e = [0, 0, 0];
+    e[k] = 1;
+    all.push({ n: e, d: Number.isFinite(box.max[k]) ? box.max[k] : L });
+    all.push({ n: e.map((v) => -v), d: Number.isFinite(box.min[k]) ? -box.min[k] : L });
+  }
+  if (all.some((p) => !p.n.every(Number.isFinite) || !Number.isFinite(p.d))) return box;
+  const tol = 1e-9 * L;
+  const lo = [Infinity, Infinity, Infinity];
+  const hi = [-Infinity, -Infinity, -Infinity];
+  const det3 = (a, b, c) => a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0]);
+  let found = false;
+  for (let i = 0; i < all.length; i++)
+    for (let j = i + 1; j < all.length; j++)
+      for (let k = j + 1; k < all.length; k++) {
+        const [A, B, C] = [all[i], all[j], all[k]];
+        const det = det3(A.n, B.n, C.n);
+        if (Math.abs(det) < 1e-12) continue;
+        // Cramer's rule on the rows n·p = d.
+        const rows = [A, B, C];
+        const p = [0, 1, 2].map((q) => det3(...rows.map((R) => R.n.map((v, r) => (r === q ? R.d : v)))) / det);
+        if (!all.every((P) => P.n[0] * p[0] + P.n[1] * p[1] + P.n[2] * p[2] <= P.d + tol)) continue;
+        found = true;
+        for (let a = 0; a < 3; a++) {
+          lo[a] = Math.min(lo[a], p[a]);
+          hi[a] = Math.max(hi[a], p[a]);
+        }
+      }
+  if (!found) return box;
+  const out = { min: [...box.min], max: [...box.max] };
+  for (let a = 0; a < 3; a++) {
+    if (lo[a] > -L / 2) out.min[a] = Math.max(out.min[a], lo[a]);
+    if (hi[a] < L / 2) out.max[a] = Math.min(out.max[a], hi[a]);
+  }
+  return out;
 }
 
 export const emptyBox = () => ({ min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity] });

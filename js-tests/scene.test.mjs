@@ -244,3 +244,27 @@ test("replacing a node by half-spaces keeps its id and reuses identical surfaces
   assert.equal(one.kind, "halfspace");
   assert.equal(one.id, cube.id);
 });
+
+test("bounds of intersections of oblique planes are exact", () => {
+  const s = new Scene();
+  const hex = s.addComposite("hexagonal-prism"); // edge 1, flat sides ⟂ x
+  const b = s.regionBounds(hex);
+  close(b.min[0], -Math.sqrt(3) / 2);
+  close(b.max[0], Math.sqrt(3) / 2);
+  close(b.min[1], -1);
+  close(b.max[1], 1);
+  assert.equal(b.min[2], -Infinity);
+  assert.equal(b.max[2], Infinity);
+
+  // The same idea for a hand-built intersection: a triangle in xy.
+  const t = new Scene();
+  const tri = t.add("intersect");
+  for (const [coeffs, sense] of [[[0, 1, 0, 0], "+"], [[1, 1, 0, 2], "-"], [[1, -1, 0, -2], "+"]])
+    t.add("halfspace", { params: { surface: t.addSurface({ type: "plane", coeffs }), sense } }, tri.id);
+  const tb = t.regionBounds(tri);
+  close(tb.min[0], -2);
+  close(tb.max[0], 2);
+  close(tb.min[1], 0);
+  close(tb.max[1], 2);
+  assert.equal(tb.max[2], Infinity);
+});

@@ -28,7 +28,7 @@
 // space, or cell) that produced it, for colouring and viewport picking.
 
 import { SURFACE_TYPES, classifyQuadric, halfspaceBounds, infiniteBox, isPlane, axisOf } from "./openmc/surfaces.js";
-import { intersectBoxes, unionBoxes, emptyBox, regionBounds as astBounds } from "./openmc/region.js";
+import { intersectBoxes, unionBoxes, emptyBox, regionBounds as astBounds, linearConstraint, refineByPlanes } from "./openmc/region.js";
 import { COMPOSITE_TYPES, defaultCompositeParams, expandComposite } from "./openmc/composite.js";
 import * as M4 from "./mat4.js";
 import { normalizeMaterial, newMaterial } from "./materials/material.js";
@@ -619,6 +619,17 @@ export class Scene {
       }
       if (boxes.length === 0) box = conj ? infiniteBox() : emptyBox();
       else box = boxes.reduce(conj ? intersectBoxes : unionBoxes);
+      if (conj && boxes.length) {
+        // Plane half-spaces among the operands: bound the polyhedron exactly.
+        const planes = kids
+          .map((c, i) => {
+            if (c.kind !== "halfspace" || !isIdentity(c.transform)) return null;
+            const flip = node.kind === "subtract" ? (i === 0 ? negated : !negated) : negated;
+            return linearConstraint(this.surfaces.get(c.params.surface), flip ? (c.params.sense === "-" ? "+" : "-") : c.params.sense);
+          })
+          .filter(Boolean);
+        box = refineByPlanes(box, planes);
+      }
     } else {
       return infiniteBox();
     }
