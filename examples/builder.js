@@ -356,76 +356,52 @@ function rootMatrixOf(id) {
   return m;
 }
 
-/** Convex polygon where the plane n·p = d cuts the box, ordered around its centroid. */
-function planeBoxPolygon(n, d, box) {
-  const corner = (i) => [0, 1, 2].map((k) => ((i >> k) & 1 ? box.max[k] : box.min[k]));
-  const pts = [];
-  for (let i = 0; i < 8; i++) {
-    for (let k = 0; k < 3; k++) {
-      const j = i | (1 << k);
-      if (j === i) continue;
-      const a = corner(i);
-      const b = corner(j);
-      const fa = n[0] * a[0] + n[1] * a[1] + n[2] * a[2] - d;
-      const fb = n[0] * b[0] + n[1] * b[1] + n[2] * b[2] - d;
-      if ((fa <= 0 && fb >= 0) || (fa >= 0 && fb <= 0)) {
-        const t = fa === fb ? 0 : fa / (fa - fb);
-        pts.push(a.map((v, q) => v + (b[q] - v) * t));
-      }
-    }
-  }
-  if (pts.length < 3) return null;
-  const c = [0, 1, 2].map((k) => pts.reduce((s, p) => s + p[k], 0) / pts.length);
-  const helper = Math.abs(n[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
-  const cr = (x, y) => [x[1] * y[2] - x[2] * y[1], x[2] * y[0] - x[0] * y[2], x[0] * y[1] - x[1] * y[0]];
-  const u = cr(n, helper);
-  const v = cr(n, u);
-  const angle = (p) => {
-    const q = p.map((x, k) => x - c[k]);
-    return Math.atan2(q[0] * v[0] + q[1] * v[1] + q[2] * v[2], q[0] * u[0] + q[1] * u[1] + q[2] * u[2]);
-  };
-  const ordered = pts.sort((p, q) => angle(p) - angle(q)).filter((p, i, arr) => i === 0 || Math.hypot(...p.map((x, k) => x - arr[i - 1][k])) > 1e-9);
-  return ordered.length >= 3 ? { polygon: ordered, centroid: c } : null;
-}
-
 /**
- * Box the plane sheets are drawn in: a cube around the world box, 1.5× its
- * largest side, so every plane gets a readable square even when the world box
- * hugs a small or flat model.
+ * Square the plane sheets are drawn in: centred on the projection of the frame
+ * centre onto the plane. The frame comes from the manual world box, else from
+ * the bounded content on screen, never from the auto world box: that one is
+ * fitted to the planes themselves, so sheets would grow as planes move apart.
  */
-function gizmoBox() {
-  const w = results.world;
-  if (!w) return null;
-  const c = w.min.map((v, i) => (v + w.max[i]) / 2);
-  const half = Math.max(1, 0.75 * Math.max(...w.max.map((v, i) => v - w.min[i])));
-  return { min: c.map((v) => v - half), max: c.map((v) => v + half) };
+function sheetFrame(contentBounds) {
+  const box = !scene.world.auto ? scene.world : contentBounds;
+  if (!box) return { center: [0, 0, 0], half: 5 };
+  return {
+    center: box.min.map((v, i) => (v + box.max[i]) / 2),
+    half: Math.max(1, 0.75 * Math.max(...box.max.map((v, i) => v - box.min[i]))),
+  };
 }
 
-/** Sheet + arrows for a plane half-space (arrows point into the kept side). */
-function planeGizmo(node, color) {
+function planeSquare(n, d, frame) {
+  const cr = (x, y) => [x[1] * y[2] - x[2] * y[1], x[2] * y[0] - x[0] * y[2], x[0] * y[1] - x[1] * y[0]];
+  // Edges follow the world axis least aligned with n, so axis planes stay axis-aligned.
+  const k = [0, 1, 2].reduce((a, b) => (Math.abs(n[b]) < Math.abs(n[a]) ? b : a));
+  const u = cr(n, [0, 1, 2].map((i) => (i === k ? 1 : 0)));
+  const ul = Math.hypot(...u);
+  const uu = u.map((x) => x / ul);
+  const v = cr(n, uu);
+  const c = frame.center;
+  const off = n[0] * c[0] + n[1] * c[1] + n[2] * c[2] - d;
+  const center = c.map((x, i) => x - off * n[i]);
+  const at = (a, b) => center.map((x, i) => x + frame.half * (a * uu[i] + b * v[i]));
+  return { polygon: [at(-1, -1), at(1, -1), at(1, 1), at(-1, 1)], center, at };
+}
+
+function planeGizmo(node, color, frame) {
   const m = rootMatrixOf(node.id);
-  const box = gizmoBox();
-  if (!m || !box) return null;
+  if (!m) return null;
   const local = isIdentity(node.transform) ? m : multiply(m, fromTransform(node.transform));
   const form = transformForm(toForm(scene.surfaces.get(node.params.surface)), local);
   const [a, b, c, e] = form.L;
   const len = Math.hypot(a, b, c);
   if (!(len > 0)) return null;
   const n = [a / len, b / len, c / len];
-  const cut = planeBoxPolygon(n, -e / len, box);
-  if (!cut) return null;
+  const sq = planeSquare(n, -e / len, frame);
   // f = n·p − d < 0 is the negative side.
   const dir = node.params.sense === "-" ? n.map((x) => -x) : n;
-  const size = Math.hypot(...box.max.map((v, i) => v - box.min[i]));
-  const length = Math.max(1e-6, 0.16 * size);
-  const anchors = [cut.centroid];
-  const poly = cut.polygon;
-  for (let k = 0; k < 4; k++) {
-    const p = poly[Math.floor((k * poly.length) / 4)];
-    anchors.push(cut.centroid.map((v, i) => v + (p[i] - v) * 0.55));
-  }
+  const length = 0.45 * frame.half;
+  const anchors = [sq.center, sq.at(0.55, 0), sq.at(-0.55, 0), sq.at(0, 0.55), sq.at(0, -0.55)];
   return {
-    plane: { polygon: poly, normal: n, color, tag: node.id },
+    plane: { polygon: sq.polygon, normal: n, color, tag: node.id },
     arrows: anchors.map((from) => ({ from, dir, length, color, tag: node.id })),
   };
 }
@@ -461,10 +437,12 @@ function renderViewport(fit) {
   const ghostIds = isolate || !xray ? [] : selection.filter((id) => !asPlane.has(id) && (!visibleIds.includes(id) || isVoidCell(nodeById.get(id) ?? {})));
   const planes = [];
   const arrows = [];
+  const contentBounds = meshBounds(mesh);
+  const frame = sheetFrame(contentBounds);
   for (const id of asPlane) {
     const node = nodeById.get(id);
     const color = selection.includes(id) ? HIGHLIGHT : leafColor(id);
-    const g = planeGizmo(node, color);
+    const g = planeGizmo(node, color, frame);
     if (g) {
       planes.push(g.plane);
       arrows.push(...g.arrows);
@@ -476,7 +454,7 @@ function renderViewport(fit) {
   const ghostMeshes = ghostIds.flatMap((id) => partsOf(id).map((p) => meshOf(p.solid))).filter(Boolean);
   viewer.setGhost(ghostMeshes.length ? mergeMeshes(ghostMeshes) : null);
 
-  sceneBounds = meshBounds(mesh) ?? (sheetPoints.length ? null : results.world);
+  sceneBounds = contentBounds ?? (sheetPoints.length ? null : results.world);
   if (sheetPoints.length) {
     const b = sceneBounds ?? { min: [...sheetPoints[0]], max: [...sheetPoints[0]] };
     for (const p of sheetPoints) for (let k = 0; k < 3; k++) {
