@@ -501,6 +501,37 @@ export class Scene {
     return n;
   }
 
+  /**
+   * Moves surface `id` before or after surface `targetId` in id order, then
+   * renumbers: the same set of ids is handed out in the new order, so imported
+   * ids stay in use. Half-spaces, periodic partners and generated half-space
+   * names ("−3 sphere") follow. Returns Map<old id, new id> of the ids that
+   * changed, or null when nothing moved.
+   */
+  reorderSurface(id, targetId, where = "before") {
+    if (id === targetId || !this.surfaces.has(id) || !this.surfaces.has(targetId)) return null;
+    const ids = [...this.surfaces.keys()].sort((a, b) => a - b);
+    const order = ids.filter((x) => x !== id);
+    order.splice(order.indexOf(targetId) + (where === "after" ? 1 : 0), 0, id);
+    const map = new Map();
+    order.forEach((old, i) => old !== ids[i] && map.set(old, ids[i]));
+    if (!map.size) return null;
+    const moved = order.map((old) => this.surfaces.get(old));
+    this.surfaces.clear();
+    moved.forEach((sf, i) => {
+      sf.id = ids[i];
+      if (sf.periodic !== undefined && map.has(sf.periodic)) sf.periodic = map.get(sf.periodic);
+      this.surfaces.set(sf.id, sf);
+    });
+    this.walk((n) => {
+      if (n.kind !== "halfspace" || !map.has(n.params.surface)) return;
+      const old = n.params.surface;
+      n.params.surface = map.get(old);
+      n.name = n.name.replace(new RegExp(`^([−+])${old}(?= )`), `$1${n.params.surface}`);
+    });
+    return map;
+  }
+
   /** Gives a half-space its own copy of its surface. */
   uniquifySurface(nodeId) {
     const node = this.find(nodeId)?.node;

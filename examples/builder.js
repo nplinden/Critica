@@ -731,6 +731,7 @@ function sceneSurfaceRow(sf, users) {
     {
       class: ["row", "surface-row", "scene-surface", surfaceSel === key && "selected primary"].filter(Boolean).join(" "),
       style: "--depth:0",
+      draggable: true,
       dataset: { surface: key },
       title: `${sf.type} ${surfaceSummary(sf)} — surface #${sf.id}${users ? `, used by ${users} half-space(s)` : ", not used by any half-space"}`,
     },
@@ -916,15 +917,57 @@ function clearDropMarks() {
 }
 
 let lastProbe = { key: "", ok: false };
+// Surfaces reorder among themselves (which renumbers them), apart from nodes.
+let dragSurface = null;
+
+function surfaceDropTarget(e) {
+  const row = e.target.closest(".scene-surface");
+  if (!row) return null;
+  const id = Number(row.dataset.surface.slice(2));
+  const r = row.getBoundingClientRect();
+  const where = e.clientY - r.top < r.height / 2 ? "before" : "after";
+  return id === dragSurface ? null : { el: row, id, where };
+}
+
+function reorderSurface(id, targetId, where) {
+  const map = scene.reorderSurface(id, targetId, where);
+  if (!map) return;
+  const remap = (key) => (key?.startsWith("s:") && map.has(Number(key.slice(2))) ? `s:${map.get(Number(key.slice(2)))}` : key);
+  surfaceSel = remap(surfaceSel);
+  const shown = [...shownSurfaces].map(remap);
+  shownSurfaces.clear();
+  shown.forEach((k) => shownSurfaces.add(k));
+  commit();
+  refresh();
+  const moved = map.get(id) ?? id;
+  setMessage(`Surface #${id} is now #${moved}; ${map.size} surface id(s) changed and their half-spaces were updated.`);
+}
+
 tree.addEventListener("dragstart", (e) => {
   const row = e.target.closest(".row");
   if (!row) return;
+  if (row.classList.contains("scene-surface")) {
+    dragSurface = Number(row.dataset.surface.slice(2));
+    dragId = null;
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", `surface ${dragSurface}`);
+    return;
+  }
+  dragSurface = null;
   dragId = Number(row.dataset.id);
   lastProbe = { key: "", ok: false };
   e.dataTransfer.effectAllowed = "move";
   e.dataTransfer.setData("text/plain", String(dragId));
 });
 tree.addEventListener("dragover", (e) => {
+  if (dragSurface != null) {
+    const t = surfaceDropTarget(e);
+    clearDropMarks();
+    if (!t) return;
+    e.preventDefault();
+    t.el.classList.add(`drop-${t.where}`);
+    return;
+  }
   const t = dropTarget(e);
   clearDropMarks();
   if (!t) return;
@@ -938,6 +981,14 @@ tree.addEventListener("dragleave", (e) => {
   if (!tree.contains(e.relatedTarget)) clearDropMarks();
 });
 tree.addEventListener("drop", (e) => {
+  if (dragSurface != null) {
+    const t = surfaceDropTarget(e);
+    clearDropMarks();
+    if (!t) return;
+    e.preventDefault();
+    run(reorderSurface, dragSurface, t.id, t.where);
+    return;
+  }
   const t = dropTarget(e);
   clearDropMarks();
   if (!t) return;
@@ -949,6 +1000,7 @@ tree.addEventListener("drop", (e) => {
 });
 tree.addEventListener("dragend", () => {
   dragId = null;
+  dragSurface = null;
   clearDropMarks();
 });
 
@@ -1799,6 +1851,7 @@ function surfaceMenu(key, x, y) {
       },
     },
     owner && { label: `Select ${owner.name}`, run: () => select([owner.id]) },
+    ...(!owner ? surfaceMoves(entry.id) : []),
     !owner && {
       label: "Delete surface",
       hint: "Del",
@@ -1807,6 +1860,16 @@ function surfaceMenu(key, x, y) {
       run: () => deleteSurface(entry.id),
     },
   ]);
+}
+
+/** Move up / down items for a scene surface (renumbers, like dragging it). */
+function surfaceMoves(id) {
+  const ids = [...scene.surfaces.keys()].sort((a, b) => a - b);
+  const i = ids.indexOf(id);
+  return [
+    { label: "Move up", hint: i > 0 ? `→ #${ids[i - 1]}` : "", disabled: i <= 0, run: () => reorderSurface(id, ids[i - 1], "before") },
+    { label: "Move down", hint: i < ids.length - 1 ? `→ #${ids[i + 1]}` : "", disabled: i >= ids.length - 1, run: () => reorderSurface(id, ids[i + 1], "after") },
+  ];
 }
 
 function onViewContext(tag, e) {

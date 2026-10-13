@@ -81,7 +81,10 @@ npm run demo    # builder at http://localhost:1948/
   them. The ● toggle excludes a node from its parent without deleting it.
 - **Surfaces**: the *Surfaces* section under the tree lists every surface of
   the scene, used or not (unused ones are not exported; <kbd>Del</kbd> deletes
-  them). *Half-space* (above the tree, next to *Cell* and *Universe*) adds a
+  them). Drag surfaces (or *Move up*/*Move down* in their right-click menu)
+  to reorder them: the ids follow the new order (the same set of ids is
+  reassigned, so imported ids stay in use) and every half-space, periodic
+  partner and generated name is updated. *Half-space* (above the tree, next to *Cell* and *Universe*) adds a
   half-space on the selected surface, inside the operation or cell selected
   just before, if any; several half-spaces can share a surface. Right-click a
   surface (in the tree or the viewport) to create its − or + half-space

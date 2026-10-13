@@ -199,3 +199,28 @@ test("mesh helpers", () => {
   assert.deepEqual(meshBounds(m), { min: [-1, -1, -1], max: [6, 1, 1] });
   assert.equal(meshBounds(mergeMeshes([])), null);
 });
+
+test("reordering surfaces renumbers them and updates their users", () => {
+  const s = new Scene();
+  const a = s.addHalfspace("x-plane", [0], "-");
+  s.addSurface({ id: 5, type: "sphere", coeffs: [0, 0, 0, 1] });
+  const c = s.addHalfspace("z-plane", [2], "+"); // surface 6
+  const b = s.add("halfspace", { params: { surface: 5, sense: "+" }, name: "+5 sphere" });
+  s.surfaces.get(1).periodic = 6;
+  s.surfaces.get(6).periodic = 1;
+  assert.deepEqual([...s.surfaces.keys()], [1, 5, 6]);
+
+  const map = s.reorderSurface(6, 1, "before"); // z-plane first
+  assert.deepEqual([...map], [[6, 1], [1, 5], [5, 6]]);
+  assert.deepEqual([...s.surfaces.values()].map((x) => [x.id, x.type]), [[1, "z-plane"], [5, "x-plane"], [6, "sphere"]]);
+  assert.equal(s.find(a.id).node.params.surface, 5);
+  assert.equal(s.find(a.id).node.name, "−5 x-plane");
+  assert.equal(s.find(b.id).node.params.surface, 6);
+  assert.equal(s.find(c.id).node.params.surface, 1);
+  assert.equal(s.find(c.id).node.name, "+1 z-plane");
+  assert.equal(s.surfaces.get(1).periodic, 5);
+  assert.equal(s.surfaces.get(5).periodic, 1);
+
+  assert.equal(s.reorderSurface(5, 6, "before"), null); // already there
+  assert.equal(s.reorderSurface(5, 5), null);
+});
