@@ -119,6 +119,8 @@
   .menu-item { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; padding: 5px 10px; border: 0; border-radius: 4px; background: none; text-align: left; cursor: pointer; white-space: nowrap; }
   .menu-item:hover, .menu-item:focus-visible, .menu-item[aria-expanded="true"] { background: var(--accent-bg); outline: none; }
   .menu-item kbd { background: none; border: 0; color: var(--muted); padding: 0; }
+  .context-menu { position: fixed; top: 0; left: 0; z-index: 50; }
+  .menu-item[disabled] { opacity: 0.45; cursor: default; background: none; }
   .menu-sep { height: 1px; margin: 4px 6px; background: var(--line); }
   .submenu { position: relative; }
   .submenu-list { top: -5px; left: calc(100% + 2px); }

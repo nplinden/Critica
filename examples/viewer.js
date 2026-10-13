@@ -14,7 +14,8 @@
 //                                   // (0–3 planes {n, d}, model coordinates); [] shows everything
 //
 // Orbit: left-drag. Pan: right-drag or shift+drag. Zoom: wheel.
-// A click (press without dragging) reports the tag under the cursor (0 = none).
+// A click (press without dragging) reports the tag under the cursor (0 = none);
+// a right click without dragging reports it to `onContext` (right-drag pans).
 
 const VS = `#version 300 es
 in vec3 aPos; in vec3 aNormal; in vec3 aColor; in float aTag; in float aOpen;
@@ -117,7 +118,7 @@ const THEMES = {
   light: { background: [0.925, 0.933, 0.945], gridMinor: [0.78, 0.8, 0.83] },
 };
 
-export function createViewer(canvas, { onPick, theme: initialTheme = "dark", grid = true } = {}) {
+export function createViewer(canvas, { onPick, onContext, theme: initialTheme = "dark", grid = true } = {}) {
   let theme = THEMES[initialTheme] ?? THEMES.dark;
   const gl = canvas.getContext("webgl2", { antialias: true });
   if (!gl) throw new Error("WebGL2 is not available in this browser");
@@ -515,6 +516,7 @@ export function createViewer(canvas, { onPick, theme: initialTheme = "dark", gri
     const moved = Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0);
     drag = null;
     if (moved < 4 && e.button === 0 && onPick) onPick(pick(e.clientX, e.clientY), e);
+    if (moved < 4 && e.button === 2 && onContext) onContext(pick(e.clientX, e.clientY), e);
   });
   canvas.addEventListener("pointermove", (e) => {
     if (!drag) return;

@@ -83,7 +83,9 @@ npm run demo    # builder at http://localhost:1948/
   the scene, used or not (unused ones are not exported; <kbd>Del</kbd> deletes
   them). *Half-space* (above the tree, next to *Cell* and *Universe*) adds a
   half-space on the selected surface, inside the operation or cell selected
-  just before, if any; several half-spaces can share a surface. The ▸ of a
+  just before, if any; several half-spaces can share a surface. Right-click a
+  surface (in the tree or the viewport) to create its − or + half-space
+  directly, keep it shown, or delete it. The ▸ of a
   leaf (half-space, shape or composite) lists the surfaces it is made of; a
   shape's generated surface becomes an editable copy when used by *Half-space*.
   Click a surface to select the surface itself: it is drawn
