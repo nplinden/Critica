@@ -64,8 +64,8 @@ npm run demo    # builder at http://localhost:1948/
 `examples/index.html` is a point-and-click modeller:
 
 - **Tool drawer** (floating over the canvas, collapsible): *Shapes* adds
-  finite cubes, cylinders and cones; *Surfaces* adds the inside of one OpenMC
-  surface: *Plane ▸* (X, Y, Z or arbitrary), infinite *Cylinder ▸* and
+  finite cubes, cylinders and cones; *Surfaces* adds a bare OpenMC surface
+  (no region yet): *Plane ▸* (X, Y, Z or arbitrary), infinite *Cylinder ▸* and
   *Cone ▸* (X, Y, Z), *Sphere*, *Torus ▸* (X, Y, Z); *Composite ▸* adds OpenMC
   composite surfaces; then Union, Subtract, Intersect, Complement, Ungroup,
   Duplicate and Reference. When one operation, cell or universe is selected,
@@ -79,8 +79,14 @@ npm run demo    # builder at http://localhost:1948/
   Ctrl-click selects several nodes; the numbers show selection order, and the
   first selected becomes the Subtract base. Drag rows to reorder or reparent
   them. The ● toggle excludes a node from its parent without deleting it.
-- **Surfaces**: the ▸ of a leaf (half-space, shape or composite) lists the
-  surfaces it is made of. Click one to select the surface itself: it is drawn
+- **Surfaces**: the *Surfaces* section under the tree lists every surface of
+  the scene, used or not (unused ones are not exported; <kbd>Del</kbd> deletes
+  them). *Half-space* (above the tree, next to *Cell* and *Universe*) adds a
+  half-space on the selected surface, inside the operation or cell selected
+  just before, if any; several half-spaces can share a surface. The ▸ of a
+  leaf (half-space, shape or composite) lists the surfaces it is made of; a
+  shape's generated surface becomes an editable copy when used by *Half-space*.
+  Click a surface to select the surface itself: it is drawn
   as a surface, not a half-space (a sheet for planes, a translucent shell for
   spheres, cylinders, cones, tori and quadrics, visible through solids), and
   clicking it in the viewport selects it again. Shared surfaces are edited in
@@ -125,8 +131,9 @@ recomputes that node and its ancestors, and undo is instant.
   editing one updates every cell that uses it, or use *Use a private copy* to
   edit one use only. Cells show their material or universe fill, and
   universes are listed under the tree.
-- New OpenMC geometry can be built directly: *Half-space* (tool drawer) adds a surface
-  (any OpenMC type, with boundary conditions), *Cell* (above the scene tree) wraps a region into a
+- New OpenMC geometry can be built directly: *Surfaces* (tool drawer) adds a surface
+  (its type can be changed to any OpenMC type, with boundary conditions), *Half-space*
+  (above the scene tree) makes a region from one side of it, *Cell* wraps a region into a
   cell with a material or universe fill, and *Universe* adds a universe.
   Builder primitives can be mixed in; they export as exact analytic surfaces.
 - *Composite* (tool drawer) adds any of OpenMC's 13 composite surfaces
