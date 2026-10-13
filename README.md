@@ -110,8 +110,10 @@ npm run demo    # builder at http://localhost:1948/
 - **Properties**: shape parameters and position, rotation and scale for any
   node, plus the triangle count, volume and size of the selected node's
   result.
-- **Viewport**: click a face to select the primitive that produced it
-  (Alt-click selects its top-level group). Selected nodes that are hidden,
+- **Viewport**: click a face to select the whole region it belongs to (the
+  top-level item or cell); click again inside the selection to step one level
+  down toward the shape or half-space that produced the face, or Alt-click to
+  go straight to it. Selected nodes that are hidden,
   such as subtracted cutters, are drawn as an x-ray ghost. *Isolate* shows
   only the selection.
 - Keyboard: <kbd>Ctrl+Z</kbd>/<kbd>Ctrl+Y</kbd> undo/redo, <kbd>Del</kbd>

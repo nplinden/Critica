@@ -165,6 +165,7 @@ let surfacesCollapsed = false; // the Surfaces section of the tree
 let lastContainer = null; // operation or cell selected just before a surface (Half-space target)
 const shownSurfaces = new Set();
 const SURFACE_TAG = 1 << 23; // pick tags from here on are displayed surfaces
+let lastMesh = null; // the mesh on screen, for ray picks
 let displayed = []; // surfaces drawn this frame: [{ key, owner, surface }], tag = SURFACE_TAG + index
 let results = { parts: new Map(), solids: new Map(), values: new Map(), errors: new Map(), world: null };
 let nodeById = new Map();
@@ -572,6 +573,7 @@ function renderViewport(fit) {
   const keep = (p) => showVoid || !p.tag || !isVoidCell(nodeById.get(p.tag) ?? {});
   const meshes = [];
   const openFlags = [];
+  const leafTags = []; // per mesh: the leaf that made each face (cells re-tag their faces)
   for (const id of visibleIds) {
     if (asPlane.has(id)) continue;
     for (const p of partsOf(id).filter(keep)) {
@@ -579,11 +581,16 @@ function renderViewport(fit) {
       if (!m) continue;
       meshes.push(m);
       openFlags.push(openSides(m, openDirections(id, p.tag)));
+      const src = p.source && meshOf(p.source);
+      leafTags.push(src && src.tags.length === m.tags.length ? src.tags : m.tags);
     }
   }
   const mesh = mergeMeshes(meshes);
+  lastMesh = mesh;
   const open = new Float32Array(mesh.tags.length);
   openFlags.reduce((at, f) => (open.set(f, at), at + f.length), 0);
+  const leaves = new Uint32Array(mesh.tags.length);
+  leafTags.reduce((at, t) => (leaves.set(t, at), at + t.length), 0);
 
   const hl = highlightedTags();
   const colors = new Float32Array(mesh.positions.length);
@@ -600,7 +607,7 @@ function renderViewport(fit) {
     colors[i * 3 + 1] = c[1];
     colors[i * 3 + 2] = c[2];
   }
-  viewer.setMesh(mesh, colors, open);
+  viewer.setMesh(mesh, colors, open, leaves);
   renderLegend(colorCache.keys());
 
   // Ghost the selected nodes that are not directly visible (cutters, void cells, universe content).
@@ -2063,7 +2070,7 @@ function onViewContext(tag, e) {
   if (key) surfaceMenu(key, e.clientX, e.clientY);
 }
 
-function onPick(tag, e) {
+function onPick(tag, e, leaf) {
   if (tag >= SURFACE_TAG) {
     const key = displayed[tag - SURFACE_TAG]?.key;
     if (key) selectSurface(key);
@@ -2073,8 +2080,113 @@ function onPick(tag, e) {
     if (!(e.ctrlKey || e.metaKey || e.shiftKey)) select([]);
     return;
   }
-  const id = e.altKey ? (scene.ancestors(tag).at(-1) ?? tag) : tag;
-  select([id], { additive: e.ctrlKey || e.metaKey || e.shiftKey });
+  select([pickTarget(tag, leaf, e.altKey, () => hitPoint(e))], { additive: e.ctrlKey || e.metaKey || e.shiftKey });
+}
+
+/**
+ * What a click on a face of `tag` selects: the whole region it belongs to
+ * (the top-level item or cell; inside a universe, the item under it). Clicking
+ * again inside the selected node steps one level down toward the leaf that
+ * made the face; `toLeaf` (Alt) jumps straight to that leaf.
+ */
+function pickTarget(tag, leaf, toLeaf, point) {
+  // A cell's faces carry the cell's tag; `leaf` is the shape inside it that made the face.
+  const inside = leaf && leaf !== tag && scene.find(leaf) && scene.isDescendant(leaf, tag);
+  let end = inside ? leaf : tag;
+  const pathTo = (id) => [...scene.ancestors(id).reverse(), id].filter((a) => !isUniverse(scene.find(a).node));
+  let path = pathTo(end);
+  const current = selection.length === 1 ? path.indexOf(selection[0]) : -1;
+  if (!toLeaf && current < 0) return path[0];
+  // Stepping down: coplanar faces keep the tag of one operand only (all six
+  // faces of a box of half-spaces may say "first plane"), so find the leaf
+  // whose surface the clicked point is actually on.
+  const better = closestLeaf(path[Math.max(current, 0)], end, point());
+  if (better !== end) {
+    end = better;
+    path = pathTo(end);
+  }
+  if (toLeaf) return end;
+  const at = path.indexOf(selection[0]);
+  return path[Math.min(at + 1, path.length - 1)];
+}
+
+/** Model-space point where the pointer ray first meets the displayed mesh, or null. */
+function hitPoint(e) {
+  const m = lastMesh;
+  if (!m || !m.indices.length) return null;
+  const { origin: o, dir: d } = viewer.rayAt(e.clientX, e.clientY);
+  const P = m.positions;
+  const I = m.indices;
+  let best = Infinity;
+  for (let t = 0; t < I.length; t += 3) {
+    const a = I[t] * 3;
+    const b = I[t + 1] * 3;
+    const c = I[t + 2] * 3;
+    const e1 = [P[b] - P[a], P[b + 1] - P[a + 1], P[b + 2] - P[a + 2]];
+    const e2 = [P[c] - P[a], P[c + 1] - P[a + 1], P[c + 2] - P[a + 2]];
+    const p = [d[1] * e2[2] - d[2] * e2[1], d[2] * e2[0] - d[0] * e2[2], d[0] * e2[1] - d[1] * e2[0]];
+    const det = e1[0] * p[0] + e1[1] * p[1] + e1[2] * p[2];
+    if (Math.abs(det) < 1e-12) continue;
+    const s = [o[0] - P[a], o[1] - P[a + 1], o[2] - P[a + 2]];
+    const u = (s[0] * p[0] + s[1] * p[1] + s[2] * p[2]) / det;
+    if (u < 0 || u > 1) continue;
+    const q = [s[1] * e1[2] - s[2] * e1[1], s[2] * e1[0] - s[0] * e1[2], s[0] * e1[1] - s[1] * e1[0]];
+    const v = (d[0] * q[0] + d[1] * q[1] + d[2] * q[2]) / det;
+    if (v < 0 || u + v > 1) continue;
+    const dist = (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) / det;
+    if (dist > 1e-9 && dist < best) best = dist;
+  }
+  return Number.isFinite(best) ? o.map((x, k) => x + d[k] * best) : null;
+}
+
+/**
+ * Among the leaves (half-spaces, shapes, composites) under `rootId`, the one
+ * with a surface nearest to `point` (distance ≈ |f| / |∇f|). Keeps `fallback`
+ * when it is as close as the best, or when there is no point.
+ */
+function closestLeaf(rootId, fallback, point) {
+  const root = scene.find(rootId)?.node;
+  if (!point || !root) return fallback;
+  const distance = (n) => {
+    const m = rootMatrixOf(n.id);
+    if (!m) return Infinity;
+    const world = !m.some((v, i) => Math.abs(v - IDENTITY[i]) > 1e-12);
+    let best = Infinity;
+    for (const { surface } of nodeSurfaces(n)) {
+      let s = surface;
+      if (!world) {
+        try {
+          const t = transformSurface(surface, m);
+          s = { type: t.type, coeffs: t.coeffs };
+        } catch {
+          continue;
+        }
+      }
+      try {
+        const f = evaluateSurface(s, point);
+        const h = 1e-6 * (1 + Math.hypot(...point));
+        const g = [0, 1, 2].map((k) => (evaluateSurface(s, point.map((x, j) => (j === k ? x + h : x))) - f) / h);
+        const d = Math.abs(f) / Math.max(Math.hypot(...g), 1e-12);
+        if (d < best) best = d;
+      } catch {
+        // Unknown surface type: skip it.
+      }
+    }
+    return best;
+  };
+  const leaves = [];
+  scene.walk((n) => n.enabled && hasSurfaces(n) && leaves.push(n), [root]);
+  const own = scene.find(fallback)?.node;
+  let bestId = fallback;
+  let bestD = own && hasSurfaces(own) ? distance(own) : Infinity;
+  for (const n of leaves) {
+    const d = distance(n);
+    if (d < bestD - 1e-9) {
+      bestD = d;
+      bestId = n.id;
+    }
+  }
+  return bestId;
 }
 
 function download(name, data, type) {
@@ -2779,7 +2891,7 @@ function renderTutorial() {
       "ul",
       {},
       h("li", {}, "Drag to orbit, right-drag to pan, scroll to zoom; ", b("Fit"), " frames everything."),
-      h("li", {}, "Click a face to select what produced it. Selected parts that are hidden (like a subtracted cutter) appear as an ", b("x-ray"), " ghost."),
+      h("li", {}, "Click a face to select its region (the top-level item or cell); click again to step down toward the shape that made the face, or ", k("Alt"), "-click to jump to it. Selected parts that are hidden (like a subtracted cutter) appear as an ", b("x-ray"), " ghost."),
       h("li", {}, b("Isolate"), " shows only the selection. ", b("Settings"), " holds the world box, curve smoothness and up axis."),
       h("li", {}, b("Cutaway"), " (", k("K"), ") slices the view with a section plane or removes a quarter or an eighth, so you can see and click the cells inside."),
     ),

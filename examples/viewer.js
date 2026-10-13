@@ -1,8 +1,9 @@
 // Small WebGL2 mesh viewer shared by the builder and the script playground.
 //
 //   const viewer = createViewer(canvas, { onPick(tag, event) {} });
-//   viewer.setMesh(mesh, colors, open);  // mesh from Solid.toMesh(), colors: rgb per vertex,
-//                                   // open: optional 1/0 per vertex for faces drawn as open sides
+//   viewer.setMesh(mesh, colors, open, leaves);  // mesh from Solid.toMesh(), colors: rgb per vertex,
+//                                   // open: optional 1/0 per vertex for faces drawn as open sides,
+//                                   // leaves: optional second tag per vertex, reported with picks
 //   viewer.setGhost(mesh | null);   // translucent x-ray overlay
 //   viewer.fit(bounds);
 //   viewer.setUp("z");              // which model axis points up on screen ("y" default)
@@ -15,22 +16,23 @@
 //                                   // (0–3 planes {n, d}, model coordinates); [] shows everything
 //
 // Orbit: left-drag. Pan: right-drag or shift+drag. Zoom: wheel.
-// A click (press without dragging) reports the tag under the cursor (0 = none);
+// A click (press without dragging) reports the tag under the cursor (0 = none)
+// and its leaf tag: onPick(tag, event, leaf);
 // a right click without dragging reports it to `onContext` (right-drag pans).
 
 const VS = `#version 300 es
-in vec3 aPos; in vec3 aNormal; in vec3 aColor; in float aTag; in float aOpen;
-uniform mat4 uMvp; uniform mat4 uView; uniform mat4 uModel;
+in vec3 aPos; in vec3 aNormal; in vec3 aColor; in float aTag; in float aOpen; in float aLeaf;
+uniform mat4 uMvp; uniform mat4 uView; uniform mat4 uModel; uniform highp int uMode;
 out vec3 vNormal; out vec3 vColor; out vec3 vPos; flat out float vTag; out float vOpen;
 void main() {
-  vNormal = mat3(uView) * mat3(uModel) * aNormal; vColor = aColor; vTag = aTag; vPos = aPos; vOpen = aOpen;
+  vNormal = mat3(uView) * mat3(uModel) * aNormal; vColor = aColor; vTag = uMode == 5 ? aLeaf : aTag; vPos = aPos; vOpen = aOpen;
   gl_Position = uMvp * uModel * vec4(aPos, 1.0);
 }`;
 
 const FS = `#version 300 es
 precision highp float;
 in vec3 vNormal; in vec3 vColor; in vec3 vPos; flat in float vTag; in float vOpen;
-uniform int uMode; uniform vec4 uTint; uniform vec3 uBg;
+uniform highp int uMode; uniform vec4 uTint; uniform vec3 uBg;
 uniform int uClipN; uniform vec4 uClip[3];
 out vec4 outColor;
 // Cutaway: the removed region is the intersection of the half-spaces n·p > d.
@@ -50,7 +52,7 @@ void main() {
     outColor = vec4(vColor * mix(0.66, 0.74, hatch), 1.0);
     return;
   }
-  if (uMode == 1) { // pick: encode tag as rgb
+  if (uMode == 1 || uMode == 5) { // pick: encode tag (5: leaf tag) as rgb
     float t = vTag;
     outColor = vec4(mod(t, 256.0), mod(floor(t / 256.0), 256.0), floor(t / 65536.0), 255.0) / 255.0;
     return;
@@ -143,6 +145,7 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
     ["aColor", 3],
     ["aTag", 1],
     ["aOpen", 1],
+    ["aLeaf", 1],
   ];
 
   // A drawable: VAO + one buffer per attribute + optional index buffer.
@@ -185,7 +188,7 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
     };
   };
 
-  const solid = makeDrawable(["aPos", "aNormal", "aColor", "aTag", "aOpen"]);
+  const solid = makeDrawable(["aPos", "aNormal", "aColor", "aTag", "aOpen", "aLeaf"]);
   const ghost = makeDrawable(["aPos", "aNormal"]);
   const lines = makeDrawable(["aPos", "aColor"]);
   // Gizmos: translucent plane sheets, their outlines, and 3D arrows.
@@ -358,6 +361,10 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
       gl.bindVertexArray(ghost.vao);
       gl.drawElements(gl.TRIANGLES, ghost.count, gl.UNSIGNED_INT, 0);
       gl.disable(gl.CULL_FACE);
+      // Restore: picking clears and tests depth with this same context.
+      gl.depthMask(true);
+      gl.enable(gl.DEPTH_TEST);
+      gl.disable(gl.BLEND);
     }
     gl.bindVertexArray(null);
   }
@@ -494,7 +501,8 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
   let fboSize = [0, 0];
   let colorRb = null;
   let depthRb = null;
-  function pick(clientX, clientY) {
+  /** Tag under the cursor (or, with `leaf`, the solid's leaf tag there). */
+  function pick(clientX, clientY, leaf = false) {
     if (!solid.count && !gizmoSheets.count && !gizmoArrows.count && !gizmoMarks.count) return 0;
     const [w, h] = resize();
     if (!fbo || fboSize[0] !== w || fboSize[1] !== h) {
@@ -525,7 +533,7 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
     gl.uniformMatrix4fv(u.uMvp, false, mvp);
     gl.enable(gl.DEPTH_TEST);
     gl.disable(gl.BLEND);
-    drawScene(1);
+    drawScene(leaf ? 5 : 1);
     drawGizmos(1);
     const px = new Uint8Array(4);
     gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
@@ -545,7 +553,10 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
     if (!drag) return;
     const moved = Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0);
     drag = null;
-    if (moved < 4 && e.button === 0 && onPick) onPick(pick(e.clientX, e.clientY), e);
+    if (moved < 4 && e.button === 0 && onPick) {
+      const tag = pick(e.clientX, e.clientY);
+      onPick(tag, e, tag ? pick(e.clientX, e.clientY, true) : 0);
+    }
     if (moved < 4 && e.button === 2 && onContext) onContext(pick(e.clientX, e.clientY), e);
   });
   canvas.addEventListener("pointermove", (e) => {
@@ -576,7 +587,7 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
 
   return {
     /** Uploads a mesh. `colors` is rgb per vertex (defaults to a neutral blue); `open` flags open-side vertices. */
-    setMesh(mesh, colors, open) {
+    setMesh(mesh, colors, open, leaves) {
       const n = mesh.positions.length / 3;
       if (!colors) {
         colors = new Float32Array(n * 3);
@@ -595,7 +606,7 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
         }
       }
       solid.upload(
-        { aPos: mesh.positions, aNormal: mesh.normals, aColor: colors, aTag: Float32Array.from(mesh.tags), aOpen: open ?? new Float32Array(n) },
+        { aPos: mesh.positions, aNormal: mesh.normals, aColor: colors, aTag: Float32Array.from(mesh.tags), aOpen: open ?? new Float32Array(n), aLeaf: leaves ? Float32Array.from(leaves) : Float32Array.from(mesh.tags) },
         indices,
       );
       redraw();
@@ -655,6 +666,25 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
       theme = next;
       buildGrid(gridSize);
       redraw();
+    },
+    /** The camera ray through a pointer position: { origin, dir } in model coordinates. */
+    rayAt(clientX, clientY) {
+      const [w, h] = resize();
+      matrices(w, h);
+      const rect = canvas.getBoundingClientRect();
+      const x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      const y = 1 - ((clientY - rect.top) / rect.height) * 2;
+      const t = Math.tan(0.8 / 2);
+      const eye = eyePosition();
+      const fwd = norm(sub(center, eye));
+      let dir = norm(fwd.map((f, i) => f + camera.right[i] * x * t * (w / h) + camera.up[i] * y * t));
+      let origin = eye;
+      if (model === MODEL_Z_UP) {
+        // Display (x, y, z) is model (x, z, −y): invert it.
+        origin = [origin[0], -origin[2], origin[1]];
+        dir = [dir[0], -dir[2], dir[1]];
+      }
+      return { origin, dir };
     },
     /** Camera position in model coordinates. */
     eye() {

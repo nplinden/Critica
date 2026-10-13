@@ -761,7 +761,8 @@ export class Evaluator {
    *  surfaces  Map<key, Solid | null>  for each requested `surfaces` entry
    *          ({ key, surface, tag }): the inside of that surface around the
    *          world box. Its faces off the world box are the surface itself.
-   * Part = { key, solid, tag? }  (tag = owning cell id). Solids are owned by the
+   * Part = { key, solid, tag?, source? }  (tag = owning cell id; source = the
+   * same solid with its leaf tags, when the part's faces were re-tagged). Solids are owned by the
    * evaluator: do not dispose them.
    */
   run(scene, { focus = [], surfaces = [] } = {}) {
@@ -850,7 +851,8 @@ export class Evaluator {
         if (cell.fill.type === "universe") parts = this.#fillParts(cell, region, ctx);
         else {
           const key = `tag${cell.id}|${region.key}`;
-          parts = [{ key, solid: this.#memo(key, () => region.solid.tag(cell.id)), tag: cell.id }];
+          // `source` keeps the faces' original tags (the leaves that made them) for picking.
+          parts = [{ key, solid: this.#memo(key, () => region.solid.tag(cell.id)), tag: cell.id, source: region.solid }];
         }
       }
       if (!this.out.parts.has(cell.id)) this.out.parts.set(cell.id, parts);
