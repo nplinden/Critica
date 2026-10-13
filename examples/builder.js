@@ -157,6 +157,12 @@ systemLight.addEventListener("change", () => viewer.setTheme(effectiveTheme()));
 
 let scene = loadScene();
 let selection = []; // ordered ids; last one is the "primary" shown in properties
+// A surface picked in the tree or viewport, as "nodeId:index" into nodeSurfaces(node).
+// Exclusive with the node selection. Pinned surfaces stay drawn when not selected.
+let surfaceSel = null;
+const shownSurfaces = new Set();
+const SURFACE_TAG = 1 << 23; // pick tags from here on are displayed surfaces
+let displayed = []; // surfaces drawn this frame: [{ key, owner, surface }], tag = SURFACE_TAG + index
 let results = { parts: new Map(), solids: new Map(), values: new Map(), errors: new Map(), world: null };
 let nodeById = new Map();
 let isolate = false;
@@ -206,6 +212,9 @@ function restore(index) {
   history.index = index;
   scene = Scene.fromJSON(JSON.parse(history.states[index]));
   selection = selection.filter((id) => scene.find(id));
+  if (surfaceSel && !surfaceAt(surfaceSel)) surfaceSel = null;
+  if (surfaceSel) surfaceAt(surfaceSel).owner.surfacesOpen = true; // keep its row on screen
+  for (const key of shownSurfaces) if (!surfaceAt(key)) shownSurfaces.delete(key);
   persist(history.states[index]);
   refresh();
 }
@@ -213,6 +222,7 @@ function restore(index) {
 const primary = () => (selection.length ? scene.find(selection[selection.length - 1])?.node : null);
 
 function select(ids, { additive = false } = {}) {
+  surfaceSel = null;
   if (!additive) selection = [...ids];
   else
     for (const id of ids) {
@@ -223,6 +233,17 @@ function select(ids, { additive = false } = {}) {
   for (const id of selection) for (const a of scene.ancestors(id)) scene.find(a).node.collapsed = false;
   refresh();
   document.querySelector(`.row[data-id="${selection.at(-1)}"]`)?.scrollIntoView({ block: "nearest" });
+}
+
+function selectSurface(key) {
+  const found = surfaceAt(key);
+  if (!found) return;
+  selection = [];
+  surfaceSel = key;
+  for (const a of scene.ancestors(found.owner.id)) scene.find(a).node.collapsed = false;
+  found.owner.surfacesOpen = true;
+  refresh();
+  document.querySelector(`.surface-row[data-surface="${key}"]`)?.scrollIntoView({ block: "nearest" });
 }
 
 // ---- evaluation + rendering --------------------------------------------------
@@ -246,7 +267,9 @@ function refresh({ props = true, fit = false } = {}) {
   scene.walk((n) => nodeById.set(n.id, n));
   try {
     const t0 = performance.now();
-    results = evaluator.run(scene, { focus: selection });
+    displayed = displayedSurfaces();
+    const curved = displayed.map((d, i) => ({ key: d.key, surface: d.surface, tag: SURFACE_TAG + i })).filter((d) => !isPlane(d.surface.type));
+    results = evaluator.run(scene, { focus: selection, surfaces: curved });
     lastEvalMs = performance.now() - t0;
   } catch (e) {
     // The evaluator disposed any stale solids, so drop the old results too.
@@ -499,9 +522,33 @@ function renderViewport(fit) {
       arrows.push(...g.arrows);
     }
   }
-  viewer.setGizmos({ planes, arrows });
-  // Fit should frame the sheets too.
-  const sheetPoints = planes.flatMap((p) => p.polygon);
+  // Surfaces shown as surfaces: plane sheets, or the shell of the surface's
+  // inside without its faces on the world box.
+  const surfaces = [];
+  const shellPoints = [];
+  displayed.forEach((d, i) => {
+    const tag = SURFACE_TAG + i;
+    const color = d.key === surfaceSel ? HIGHLIGHT : leafColor(d.owner.id);
+    if (isPlane(d.surface.type)) {
+      const [a, b, c, e] = toForm(d.surface).L;
+      const len = Math.hypot(a, b, c);
+      if (!(len > 0)) return;
+      const n = [a / len, b / len, c / len];
+      planes.push({ polygon: planeSquare(n, -e / len, frame).polygon, normal: n, color, tag });
+      return;
+    }
+    const m = meshOf(results.surfaces?.get(d.key));
+    if (!m) return;
+    const onBox = openSides(m, [0, 1, 2].map(() => [true, true]));
+    const indices = [];
+    for (let t = 0; t < m.indices.length; t += 3) if (!onBox[m.indices[t]]) indices.push(m.indices[t], m.indices[t + 1], m.indices[t + 2]);
+    if (!indices.length) return;
+    surfaces.push({ positions: m.positions, normals: m.normals, indices, color, tag });
+    for (const v of indices) shellPoints.push([m.positions[v * 3], m.positions[v * 3 + 1], m.positions[v * 3 + 2]]);
+  });
+  viewer.setGizmos({ planes, arrows, surfaces });
+  // Fit should frame the sheets and shells too.
+  const sheetPoints = [...planes.flatMap((p) => p.polygon), ...shellPoints];
   const ghostMeshes = ghostIds.flatMap((id) => partsOf(id).map((p) => meshOf(p.solid))).filter(Boolean);
   viewer.setGhost(ghostMeshes.length ? mergeMeshes(ghostMeshes) : null);
 
@@ -623,13 +670,15 @@ function surfaceSummary(s) {
 }
 
 function surfaceRows(node, depth) {
-  return nodeSurfaces(node).map(({ surface, sense, id, users, note }) =>
-    h(
+  return nodeSurfaces(node).map(({ surface, sense, id, users, note }, k) => {
+    const key = `${node.id}:${k}`;
+    const shown = shownSurfaces.has(key);
+    return h(
       "div",
       {
-        class: "row surface-row",
+        class: ["row", "surface-row", surfaceSel === key && "selected primary"].filter(Boolean).join(" "),
         style: `--depth:${depth}`,
-        dataset: { id: node.id },
+        dataset: { id: node.id, surface: key },
         title: `${sense === "±" ? "used on both sides" : `${sense === "-" ? "negative (inside)" : "positive (outside)"} side`} of ${surface.type} ${surfaceSummary(surface)}${id != null ? ` — surface #${id}` : " — generated by this node"}${note ? ` (${note})` : ""}`,
       },
       h("span", { class: "caret" }),
@@ -638,8 +687,38 @@ function surfaceRows(node, depth) {
       h("span", { class: "name" }, h("span", { class: "surface-type" }, surface.type), " ", h("span", { class: "surface-coeffs" }, surfaceSummary(surface))),
       id != null && h("span", { class: "oid" }, `#${id}`),
       users > 1 && h("span", { class: "badge shared", title: `Shared by ${users} half-spaces` }, `×${users}`),
-    ),
-  );
+      h("button", { class: "eye", dataset: { action: "show-surface" }, title: shown ? "Stop showing this surface" : "Keep this surface shown in the viewport" }, shown ? "◉" : "○"),
+    );
+  });
+}
+
+/** The surface behind a "nodeId:index" key: { owner, entry } (entry from nodeSurfaces), or null. */
+function surfaceAt(key) {
+  const [id, k] = key.split(":").map(Number);
+  const owner = scene.find(id)?.node;
+  const entry = owner && hasSurfaces(owner) ? nodeSurfaces(owner)[k] : null;
+  return entry ? { owner, entry } : null;
+}
+
+/** Selected and pinned surfaces, in world coordinates (universe content in its own). */
+function displayedSurfaces() {
+  const out = [];
+  for (const key of new Set([...shownSurfaces, surfaceSel].filter(Boolean))) {
+    const found = surfaceAt(key);
+    if (!found) continue;
+    let surface = found.entry.surface;
+    const m = rootMatrixOf(found.owner.id) ?? IDENTITY;
+    if (m.some((v, i) => Math.abs(v - IDENTITY[i]) > 1e-12)) {
+      try {
+        const t = transformSurface(surface, m);
+        surface = { type: t.type, coeffs: t.coeffs };
+      } catch {
+        continue;
+      }
+    }
+    out.push({ key, owner: found.owner, surface });
+  }
+  return out;
 }
 
 function treeRow(node, depth, parent, index) {
@@ -700,6 +779,14 @@ tree.addEventListener("click", (e) => {
   const node = scene.find(Number(row.dataset.id))?.node;
   if (!node) return;
   const action = e.target.closest("[data-action]")?.dataset.action;
+  const key = row.dataset.surface;
+  if (key) {
+    if (action === "show-surface") {
+      if (!shownSurfaces.delete(key)) shownSurfaces.add(key);
+      refresh({ props: !primary() });
+    } else selectSurface(key);
+    return;
+  }
   if (action === "toggle") {
     node.collapsed = !node.collapsed;
     persist();
@@ -942,6 +1029,11 @@ function renderProps() {
 function renderPropsBody() {
   const panel = $("props");
   const node = primary();
+  const picked = !node && surfaceSel ? surfaceAt(surfaceSel) : null;
+  if (picked) {
+    panel.replaceChildren(...surfacePanel(picked));
+    return;
+  }
   if (!node) {
     panel.replaceChildren(
       h("h2", {}, "Properties"),
@@ -1084,7 +1176,6 @@ function halfspaceSections(node) {
   const s = scene.surfaces.get(node.params.surface);
   if (!s) return [h("div", { class: "section" }, h("div", { class: "note" }, `Surface ${node.params.surface} is missing.`))];
   const users = scene.surfaceUsers(s.id);
-  const def = SURFACE_TYPES[s.type];
   return [
     h(
       "div",
@@ -1096,14 +1187,79 @@ function halfspaceSections(node) {
       "div",
       { class: "section" },
       h("h3", {}, `Surface #${s.id}`),
-      users > 1 && h("div", { class: "note" }, `Shared by ${users} half-spaces: edits apply to all of them.`),
-      field("Type", select_("surface.type", Object.keys(SURFACE_TYPES).map((t) => [t, t]), s.type)),
-      def.coeffs.map((name, i) => field(name, numberInput(node, `surface.coeffs.${i}`, { step: 0.1 }))),
-      field("Boundary", select_("surface.boundary", BOUNDARY_TYPES.map((b) => [b, b]), s.boundary ?? "transmission")),
-      field("Name", h("input", { type: "text", value: s.name ?? "", dataset: { path: "surface.name" } })),
+      surfaceFields(node, s, users),
       users > 1 && h("div", { class: "props-actions" }, h("button", { class: "tb", onclick: () => run(uniquifySurface) }, "Use a private copy")),
     ),
   ];
+}
+
+/** Editable fields of the shared surface `s` used by the half-space `node`. */
+function surfaceFields(node, s, users) {
+  const def = SURFACE_TYPES[s.type];
+  return [
+    users > 1 && h("div", { class: "note" }, `Shared by ${users} half-spaces: edits apply to all of them.`),
+    field("Type", select_("surface.type", Object.keys(SURFACE_TYPES).map((t) => [t, t]), s.type)),
+    def.coeffs.map((name, i) => field(name, numberInput(node, `surface.coeffs.${i}`, { step: 0.1 }))),
+    field("Boundary", select_("surface.boundary", BOUNDARY_TYPES.map((b) => [b, b]), s.boundary ?? "transmission")),
+    field("Name", h("input", { type: "text", value: s.name ?? "", dataset: { path: "surface.name" } })),
+  ];
+}
+
+/** Properties of a selected surface: editable when shared, read-only when generated by a shape. */
+function surfacePanel({ owner, entry }) {
+  const shared = entry.id != null ? scene.surfaces.get(entry.id) : null;
+  const key = surfaceSel;
+  const pinned = shownSurfaces.has(key);
+  const out = [h("h2", {}, "Surface", h("span", {}, shared ? `#${shared.id}` : "generated"))];
+  if (shared) {
+    const users = [];
+    scene.walk((n) => n.kind === "halfspace" && n.params.surface === shared.id && users.push(n));
+    out.push(
+      h("div", { class: "section" }, surfaceFields(owner, shared, users.length)),
+      h(
+        "div",
+        { class: "section" },
+        h("h3", {}, "Used by"),
+        users.map((n) =>
+          h("div", { class: "info" }, h("button", { class: "link-button", onclick: () => select([n.id]) }, n.name), ` (${n.params.sense === "-" ? "− inside" : "+ outside"})`),
+        ),
+      ),
+    );
+  } else {
+    const s = entry.surface;
+    const names = SURFACE_TYPES[s.type]?.coeffs ?? [];
+    out.push(
+      h(
+        "div",
+        { class: "section" },
+        field("Type", h("span", { class: "info" }, s.type)),
+        names.map((name, i) => field(name, h("span", { class: "info" }, fmt(s.coeffs[i])))),
+        h("div", { class: "note" }, `Generated by “${owner.name}”${entry.note ? ` (${entry.note})` : ""}: change that node to change this surface.`),
+        h("div", { class: "props-actions" }, h("button", { class: "tb", onclick: () => select([owner.id]) }, `Select ${owner.name}`)),
+      ),
+    );
+  }
+  out.push(
+    h(
+      "div",
+      { class: "section" },
+      h("h3", {}, "Display"),
+      field(
+        "Keep shown",
+        h("input", {
+          type: "checkbox",
+          checked: pinned,
+          style: "justify-self:start",
+          title: "Keep drawing this surface after selecting something else",
+          onchange: () => {
+            if (!shownSurfaces.delete(key)) shownSurfaces.add(key);
+            refresh({ props: false });
+          },
+        }),
+      ),
+    ),
+  );
+  return out;
 }
 
 function cellSections(node) {
@@ -1224,7 +1380,8 @@ function readInput(el) {
   return v;
 }
 
-const targetNode = () => primary() ?? {};
+// With a shared surface selected, "surface.*" edits go through the half-space that uses it.
+const targetNode = () => primary() ?? (surfaceSel && surfaceAt(surfaceSel)?.owner) ?? {};
 
 /** Shared input handling for the properties panel and the settings dialog. */
 function onFormInput(e) {
@@ -1436,6 +1593,11 @@ function deleteSelection() {
 }
 
 function onPick(tag, e) {
+  if (tag >= SURFACE_TAG) {
+    const key = displayed[tag - SURFACE_TAG]?.key;
+    if (key) selectSurface(key);
+    return;
+  }
   if (!tag || !scene.find(tag)) {
     if (!(e.ctrlKey || e.metaKey || e.shiftKey)) select([]);
     return;

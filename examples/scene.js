@@ -727,14 +727,17 @@ export class Evaluator {
    *  values  Map<node id, Value>
    *  errors  Map<node id, string>
    *  world   the resolved world box
+   *  surfaces  Map<key, Solid | null>  for each requested `surfaces` entry
+   *          ({ key, surface, tag }): the inside of that surface around the
+   *          world box. Its faces off the world box are the surface itself.
    * Part = { key, solid, tag? }  (tag = owning cell id). Solids are owned by the
    * evaluator: do not dispose them.
    */
-  run(scene, { focus = [] } = {}) {
+  run(scene, { focus = [], surfaces = [] } = {}) {
     this.scene = scene;
     this.used = new Map();
     const world = scene.resolveWorld();
-    const out = { parts: new Map(), solids: new Map(), values: new Map(), errors: new Map(), world };
+    const out = { parts: new Map(), solids: new Map(), values: new Map(), errors: new Map(), world, surfaces: new Map() };
     this.out = out;
     const ctx = this.#ctx(world, []);
     try {
@@ -752,6 +755,13 @@ export class Evaluator {
           const { value, ctx: c } = out.values.get(id);
           const m = this.#materialize(value, c);
           if (m) out.solids.set(id, m.solid);
+        }
+      }
+      for (const { key, surface, tag } of surfaces) {
+        try {
+          out.surfaces.set(key, this.#surfaceSide(surface, "-", ctx, tag, `srf${tag}:`).solid ?? null);
+        } catch {
+          out.surfaces.set(key, null);
         }
       }
     } finally {

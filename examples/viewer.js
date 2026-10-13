@@ -7,8 +7,9 @@
 //   viewer.fit(bounds);
 //   viewer.setUp("z");              // which model axis points up on screen ("y" default)
 //   viewer.setTheme("light");       // background and grid colors: "dark" (default) or "light"
-//   viewer.setGizmos({ planes, arrows });  // plane sheets + 3D arrows (model coordinates):
-//       planes: [{ polygon: [[x,y,z]…], normal, color, tag }], arrows: [{ from, dir, length, color, tag }]
+//   viewer.setGizmos({ planes, arrows, surfaces });  // plane sheets, 3D arrows and translucent
+//       surface shells (model coordinates): planes: [{ polygon: [[x,y,z]…], normal, color, tag }],
+//       arrows: [{ from, dir, length, color, tag }], surfaces: [{ positions, normals, indices, color, tag }]
 //   viewer.setClip(planes);         // cutaway: hide the region where n·p > d for every plane
 //                                   // (0–3 planes {n, d}, model coordinates); [] shows everything
 //
@@ -387,13 +388,19 @@ export function createViewer(canvas, { onPick, theme: initialTheme = "dark", gri
       gl.drawArrays(gl.LINES, 0, gizmoLineCount);
     }
     if (gizmoSheets.count) {
-      // Occluded by solids, but do not hide what is behind the sheet.
+      // Translucent and without depth writes, so nothing behind is hidden.
+      // Parts behind solids are drawn too, fainter, so a surface inside a
+      // cell stays visible.
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
       gl.depthMask(false);
       gl.uniform1i(u.uMode, 4);
-      gl.uniform4f(u.uTint, 1, 1, 1, 0.28);
       gl.bindVertexArray(gizmoSheets.vao);
+      gl.depthFunc(gl.GREATER);
+      gl.uniform4f(u.uTint, 1, 1, 1, 0.12);
+      gl.drawElements(gl.TRIANGLES, gizmoSheets.count, gl.UNSIGNED_INT, 0);
+      gl.depthFunc(gl.LESS);
+      gl.uniform4f(u.uTint, 1, 1, 1, 0.28);
       gl.drawElements(gl.TRIANGLES, gizmoSheets.count, gl.UNSIGNED_INT, 0);
       gl.depthMask(true);
       gl.disable(gl.BLEND);
@@ -567,8 +574,8 @@ export function createViewer(canvas, { onPick, theme: initialTheme = "dark", gri
       else ghost.count = 0;
       redraw();
     },
-    /** Plane sheets (with outlines) and 3D arrows, in model coordinates; tags make them pickable. */
-    setGizmos({ planes = [], arrows = [] } = {}) {
+    /** Plane sheets (with outlines), 3D arrows and surface shells, in model coordinates; tags make them pickable. */
+    setGizmos({ planes = [], arrows = [], surfaces = [] } = {}) {
       const sheet = { pos: [], nrm: [], col: [], tag: [], idx: [] };
       const outline = { pos: [], col: [] };
       for (const p of planes) {
@@ -584,6 +591,17 @@ export function createViewer(canvas, { onPick, theme: initialTheme = "dark", gri
           outline.pos.push(...v, ...p.polygon[(k + 1) % p.polygon.length]);
           outline.col.push(...p.color, ...p.color);
         });
+      }
+      for (const m of surfaces) {
+        const base = sheet.pos.length / 3;
+        const n = m.positions.length / 3;
+        for (let i = 0; i < n; i++) {
+          sheet.pos.push(m.positions[i * 3], m.positions[i * 3 + 1], m.positions[i * 3 + 2]);
+          sheet.nrm.push(m.normals[i * 3], m.normals[i * 3 + 1], m.normals[i * 3 + 2]);
+          sheet.col.push(...m.color);
+          sheet.tag.push(m.tag ?? 0);
+        }
+        for (const i of m.indices) sheet.idx.push(base + i);
       }
       const arrow = { pos: [], nrm: [], col: [], tag: [], idx: [] };
       for (const a of arrows) arrowMesh(a.from, a.dir, a.length, a.color, a.tag ?? 0, arrow);
