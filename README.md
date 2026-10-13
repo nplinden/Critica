@@ -186,8 +186,10 @@ The **Materials** tab edits the material library that cells reference by id
 - Materials hold nuclides and natural elements (optionally enriched, using
   OpenMC's uranium correlation or two-isotope enrichment), in atom or weight
   fractions, with any OpenMC density unit (`g/cm3`, `kg/m3`, `atom/b-cm`,
-  `atom/cm3`, `sum`, `macro`), S(α,β) tables, temperature, volume,
-  depletable flag, isotropic nuclides, macroscopic and NCrystal options.
+  `atom/cm3`, `sum`), S(α,β) tables, temperature, volume,
+  depletable flag and isotropic nuclides. Macroscopic (multigroup) data and
+  NCrystal `cfg` are not supported: on import, such materials come in empty or
+  without their `cfg`, with a warning.
 - *From library* (Materials ribbon) adds any of the 411 reference materials of the PNNL compendium
   (PNNL-15870 Rev. 2) that OpenMC bundles; *+ Formula* adds a chemical formula.
 - A live summary shows mass and atom densities, molar mass, element and

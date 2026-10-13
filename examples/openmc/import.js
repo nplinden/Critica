@@ -37,7 +37,7 @@ export function readMaterials(materialsEl, warnings = []) {
   for (const el of children(materialsEl, "material")) {
     const id = getText(el, "id");
     try {
-      const m = materialFromXML(el);
+      const m = materialFromXML(el, { warnings });
       materials[m.id] = m;
     } catch (e) {
       warnings.push(`Material ${id}: ${e.message}`);

@@ -74,9 +74,10 @@ type.
 `examples/materials/material.js` mirrors `openmc.Material`:
 
 - **Format.** `materials.xml` holds only nuclides (`<nuclide name ao|wo>`),
-  `<density value units>`, `<sab name fraction>`, `<isotropic>`,
-  `<macroscopic>` and the `cfg`, `temperature`, `volume` and `depletable`
-  attributes. OpenMC's C++ reader rejects `<element>`: elements exist only in
+  `<density value units>`, `<sab name fraction>`, `<isotropic>` and the
+  `temperature`, `volume` and `depletable` attributes. Critica does not support
+  `<macroscopic>` (multigroup) materials or the NCrystal `cfg` attribute: they
+  are reported on import, the first imported empty, the second without `cfg`. OpenMC's C++ reader rejects `<element>`: elements exist only in
   the Python API, which expands them before writing. Critica does the same on
   export.
 - **Expansion** ports `Element.expand` without a `cross_sections.xml`:

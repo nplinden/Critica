@@ -13,6 +13,7 @@ import {
   materialToXML,
   materialsElement,
   newMaterial,
+  normalizeMaterial,
   fromLibrary,
   atomicMass,
   atomicWeight,
@@ -76,7 +77,6 @@ test("validation catches what OpenMC rejects", () => {
   assert.match(validate({ ...ok, components: [] }).errors[0], /at least one/);
   assert.match(validate({ ...ok, components: [{ kind: "nuclide", name: "u235", percent: 1, type: "ao" }] }).errors[0], /not a nuclide/);
   assert.match(validate({ ...ok, density: { value: 0, units: "g/cm3" } }).errors[0], /positive/);
-  assert.match(validate({ ...ok, macroscopic: "UO2" }).errors.join(), /macroscopic/);
   assert.match(validate({ ...ok, sab: [{ name: "c_H_in_H2O", fraction: 2 }] }).errors.join(), /fraction/);
 });
 
@@ -198,4 +198,23 @@ test("scene material library: users, renaming, legacy scenes", async () => {
   assert.equal(legacy.materials[3].name, "old");
   assert.deepEqual(legacy.materials[3].components, []);
   assert.equal(legacy.materials[3].id, 3);
+});
+
+test("macroscopic and NCrystal materials are not supported", async () => {
+  const { importMaterialsXML } = await import("../examples/openmc/import.js");
+  const out = importMaterialsXML(`<materials>
+    <material id="1" name="mg"><density units="macro"/><macroscopic name="UO2"/></material>
+    <material id="2" name="al" cfg="Al_sg225.ncmat"><density value="2.7" units="g/cm3"/><nuclide name="Al27" ao="1"/></material>
+  </materials>`);
+  assert.equal(out.materials[1].name, "mg");
+  assert.equal(out.materials[1].components.length, 0);
+  assert.equal(out.materials[2].components.length, 1);
+  assert.equal("cfg" in out.materials[2], false);
+  assert.match(out.warnings.join("\n"), /Material 1: macroscopic/);
+  assert.match(out.warnings.join("\n"), /Material 2: NCrystal cfg "Al_sg225.ncmat"/);
+  assert.doesNotMatch(serializeXML(materialToXML(out.materials[2])), /cfg|macroscopic/);
+  // Older saved scenes lose the retired fields.
+  const old = normalizeMaterial(5, { name: "x", macroscopic: "UO2", cfg: "a.ncmat", density: { value: 1, units: "macro" } });
+  assert.equal("macroscopic" in old || "cfg" in old, false);
+  assert.equal(old.density.units, "g/cm3");
 });

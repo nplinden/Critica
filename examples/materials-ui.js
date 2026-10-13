@@ -21,7 +21,7 @@ import { serializeXML } from "./openmc/xml.js";
 const $ = (id) => document.getElementById(id);
 const sig = (v, n = 6) => (v == null || !Number.isFinite(v) ? "—" : Math.abs(v) !== 0 && (Math.abs(v) < 1e-3 || Math.abs(v) >= 1e5) ? v.toExponential(n - 1) : String(Number(v.toPrecision(n))));
 const pct = (v) => (v == null ? "—" : `${sig(v * 100, 5)} %`);
-const UNIT_LABELS = { "g/cm3": "g/cm³", "kg/m3": "kg/m³", "atom/b-cm": "atom/b-cm", "atom/cm3": "atom/cm³", sum: "sum of components", macro: "macro (multigroup)" };
+const UNIT_LABELS = { "g/cm3": "g/cm³", "kg/m3": "kg/m³", "atom/b-cm": "atom/b-cm", "atom/cm3": "atom/cm³", sum: "sum of components" };
 
 /**
  * ctx: {
@@ -179,7 +179,7 @@ export function createMaterialsWorkspace(ctx) {
           "div",
           { class: "section" },
           h("h3", {}, "Density"),
-          h("div", { class: "density-row" }, num("density.value", units === "sum" ? null : m.density.value, { min: 0, disabled: units === "sum", placeholder: units === "sum" ? "sum" : units === "macro" ? "×1" : "" }), sel("density.units", DENSITY_UNITS.map((u) => [u, UNIT_LABELS[u]]), units)),
+          h("div", { class: "density-row" }, num("density.value", units === "sum" ? null : m.density.value, { min: 0, disabled: units === "sum", placeholder: units === "sum" ? "sum" : "" }), sel("density.units", DENSITY_UNITS.map((u) => [u, UNIT_LABELS[u]]), units)),
           h("div", { class: "note" }, units === "sum" ? "Component amounts are absolute: atom/b-cm (atom fractions) or g/cm³ (weight fractions)." : "Component amounts are relative and get normalized."),
           field("Temperature", h("div", { class: "unit-input" }, num("temperature", m.temperature, { optional: true, placeholder: "default" }), h("span", { class: "muted" }, "K"))),
           field("Volume", h("div", { class: "unit-input" }, num("volume", m.volume, { optional: true, min: 0, placeholder: "—" }), h("span", { class: "muted" }, "cm³"))),
@@ -188,20 +188,16 @@ export function createMaterialsWorkspace(ctx) {
           "div",
           { class: "section" },
           h("h3", {}, "Composition"),
-          m.macroscopic
-            ? h("div", { class: "note" }, `Macroscopic data set "${m.macroscopic}" (multigroup); remove it under Advanced to list nuclides.`)
-            : [
-                field("Fractions", sel("fractionType", [["ao", "atom (ao)"], ["wo", "weight (wo)"]], type), "Applies to every component (OpenMC does not allow mixing)"),
-                h("div", { class: "comp-head" }, h("span", {}, "Kind"), h("span", {}, "Name"), h("span", {}, units === "sum" ? (type === "ao" ? "atom/b-cm" : "g/cm³") : "Amount"), h("span"), h("span")),
-                componentRows(m),
-                h(
-                  "div",
-                  { class: "props-actions" },
-                  h("button", { class: "tb", onclick: () => edit((mm) => mm.components.push({ kind: "nuclide", name: "", percent: 1, type })) }, "+ Nuclide"),
-                  h("button", { class: "tb", onclick: () => edit((mm) => mm.components.push({ kind: "element", name: "", percent: 1, type })) }, "+ Element"),
-                ),
-                h("div", { class: "formula-row" }, formula, formulaTotal, h("button", { class: "tb", onclick: addFormula, title: "Add the formula's elements (like add_elements_from_formula)" }, "+ Formula")),
-              ],
+          field("Fractions", sel("fractionType", [["ao", "atom (ao)"], ["wo", "weight (wo)"]], type), "Applies to every component (OpenMC does not allow mixing)"),
+          h("div", { class: "comp-head" }, h("span", {}, "Kind"), h("span", {}, "Name"), h("span", {}, units === "sum" ? (type === "ao" ? "atom/b-cm" : "g/cm³") : "Amount"), h("span"), h("span")),
+          componentRows(m),
+          h(
+            "div",
+            { class: "props-actions" },
+            h("button", { class: "tb", onclick: () => edit((mm) => mm.components.push({ kind: "nuclide", name: "", percent: 1, type })) }, "+ Nuclide"),
+            h("button", { class: "tb", onclick: () => edit((mm) => mm.components.push({ kind: "element", name: "", percent: 1, type })) }, "+ Element"),
+          ),
+          h("div", { class: "formula-row" }, formula, formulaTotal, h("button", { class: "tb", onclick: addFormula, title: "Add the formula's elements (like add_elements_from_formula)" }, "+ Formula")),
         ),
         h(
           "div",
@@ -221,11 +217,9 @@ export function createMaterialsWorkspace(ctx) {
         ),
         h(
           "details",
-          { class: "section advanced", open: Boolean(m.macroscopic || m.cfg || m.isotropic.length) },
+          { class: "section advanced", open: Boolean(m.isotropic.length) },
           h("summary", {}, "Advanced"),
           field("Isotropic", text("isotropic", m.isotropic.join(" "), { placeholder: "nuclides, space separated" }), "Nuclides with isotropic-in-lab elastic scattering"),
-          field("Macroscopic", text("macroscopic", m.macroscopic ?? "", { placeholder: "multigroup data set" })),
-          field("NCrystal cfg", text("cfg", m.cfg ?? "", { placeholder: "e.g. Al_sg225.ncmat" })),
         ),
       );
     });
@@ -353,10 +347,6 @@ export function createMaterialsWorkspace(ctx) {
     }
     if (path === "isotropic") {
       m.isotropic = String(value).split(/[\s,]+/).filter(Boolean);
-      return true;
-    }
-    if (path === "macroscopic" || path === "cfg") {
-      m[path] = String(value).trim() || null;
       return true;
     }
     if (path.endsWith(".enrichmentTarget") || path.endsWith(".enrichmentType")) {

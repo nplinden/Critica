@@ -2,10 +2,10 @@
 //
 // Material: {
 //   id, name, color?, depletable, temperature, volume,
-//   density: { value, units },          // units: g/cm3 kg/m3 atom/b-cm atom/cm3 sum macro
+//   density: { value, units },          // units: g/cm3 kg/m3 atom/b-cm atom/cm3 sum
 //   components: [{ kind: "nuclide"|"element", name, percent, type: "ao"|"wo",
 //                  enrichment?, enrichmentTarget?, enrichmentType? }],
-//   sab: [{ name, fraction }], isotropic: [nuclide], macroscopic, cfg
+//   sab: [{ name, fraction }], isotropic: [nuclide]
 // }
 // Elements are expanded into natural isotopes when written to XML, exactly as
 // the Python API does (OpenMC's C++ reader only accepts nuclides). Without a
@@ -15,7 +15,7 @@
 import { AVOGADRO, SYMBOLS, NATURAL_ABUNDANCE, MASSES } from "./nuclear-data.js";
 import { element, getText, getList, children } from "../openmc/xml.js";
 
-export const DENSITY_UNITS = ["g/cm3", "kg/m3", "atom/b-cm", "atom/cm3", "sum", "macro"];
+export const DENSITY_UNITS = ["g/cm3", "kg/m3", "atom/b-cm", "atom/cm3", "sum"];
 const UNIT_ALIASES = { "g/cc": "g/cm3", "atom/cc": "atom/cm3" };
 const Z_OF = new Map(SYMBOLS.map((s, z) => [s, z]).filter(([s]) => s));
 
@@ -131,11 +131,11 @@ export const canonicalUnits = (u) => UNIT_ALIASES[u] ?? u;
 
 /**
  * Port of openmc.Material.get_nuclide_atom_densities: nuclide → atom/b-cm.
- * Returns null for macroscopic materials.
+ * Returns null for a material without nuclides.
  */
 export function atomDensities(mat, nuclides = expandMaterial(mat)) {
   const units = canonicalUnits(mat.density.units);
-  if (units === "macro" || !nuclides.length) return null;
+  if (!nuclides.length) return null;
   let density;
   if (units === "sum") density = nuclides.reduce((s, n) => s + n.percent, 0);
   else if (units === "g/cm3") density = -mat.density.value;
@@ -194,14 +194,8 @@ export function validate(mat) {
   const warnings = [];
   const units = canonicalUnits(mat.density.units);
   if (!DENSITY_UNITS.includes(units)) errors.push(`unknown density units "${mat.density.units}"`);
-  if (!["sum", "macro"].includes(units) && !(mat.density.value > 0)) errors.push("density must be a positive number");
-  if (mat.macroscopic) {
-    if (mat.components.length || mat.sab.length) errors.push("a macroscopic material cannot also list nuclides, elements or S(α,β) tables");
-    if (units !== "macro") warnings.push('macroscopic data normally uses density units "macro"');
-  } else {
-    if (!mat.components.length) errors.push("add at least one nuclide or element");
-    if (units === "macro") errors.push('density units "macro" need a macroscopic data set');
-  }
+  if (units !== "sum" && !(mat.density.value > 0)) errors.push("density must be a positive number");
+  if (!mat.components.length) errors.push("add at least one nuclide or element");
   const types = new Set(mat.components.map((c) => c.type));
   if (types.size > 1) errors.push("all components must use the same percent type (atom or weight)");
   for (const c of mat.components) {
@@ -300,16 +294,18 @@ export function newMaterial(id, overrides = {}) {
     components: [],
     sab: [],
     isotropic: [],
-    macroscopic: null,
-    cfg: null,
     ...overrides,
   };
 }
 
-/** Fills missing fields (older scenes stored only { name }). */
+/** Fills missing fields (older scenes stored only { name }) and drops retired ones. */
 export function normalizeMaterial(id, m = {}) {
   const base = newMaterial(Number(id), { name: m.name || `Material ${id}` });
-  return { ...base, ...m, id: Number(id), density: { ...base.density, ...(m.density ?? {}) }, components: m.components ?? [], sab: m.sab ?? [], isotropic: m.isotropic ?? [] };
+  // Macroscopic (multigroup) data and NCrystal cfg are no longer supported.
+  const { macroscopic: _macro, cfg: _cfg, ...rest } = m;
+  const density = { ...base.density, ...(m.density ?? {}) };
+  if (density.units === "macro") density.units = base.density.units;
+  return { ...base, ...rest, id: Number(id), density, components: m.components ?? [], sab: m.sab ?? [], isotropic: m.isotropic ?? [] };
 }
 
 /** A material from a bundled library (e.g. PNNL): elements in atom fractions + g/cm3. */
@@ -332,10 +328,16 @@ export function fromLibrary(library, materialName, id) {
 
 const num = (s) => (s === undefined || s === "" ? null : Number(s));
 
-/** openmc.Material.from_xml_element, keeping NCrystal cfg and macroscopic data. */
-export function materialFromXML(el, { group = true } = {}) {
+/**
+ * openmc.Material.from_xml_element. Macroscopic (multigroup) materials are not
+ * supported and throw; an NCrystal `cfg` is dropped with a note in `warnings`.
+ */
+export function materialFromXML(el, { group = true, warnings = [] } = {}) {
   const id = Number(getText(el, "id"));
   if (!Number.isInteger(id)) throw new Error("material without a valid id");
+  if (children(el, "macroscopic").length) throw new Error("macroscopic (multigroup) data is not supported; imported as an empty material");
+  const cfg = getText(el, "cfg");
+  if (cfg) warnings.push(`Material ${id}: NCrystal cfg "${cfg}" is not supported and was dropped (its nuclides were kept).`);
   const d = children(el, "density")[0];
   const units = canonicalUnits(d ? getText(d, "units") : "sum");
   const nuclides = children(el, "nuclide").map((n) => {
@@ -343,7 +345,6 @@ export function materialFromXML(el, { group = true } = {}) {
     const ao = getText(n, "ao");
     return ao !== undefined ? { name, percent: Number(ao), type: "ao" } : { name, percent: Number(getText(n, "wo")), type: "wo" };
   });
-  const macro = children(el, "macroscopic")[0];
   return normalizeMaterial(id, {
     name: getText(el, "name") ?? "",
     depletable: ["true", "1"].includes(getText(el, "depletable")),
@@ -353,8 +354,6 @@ export function materialFromXML(el, { group = true } = {}) {
     components: group ? groupIntoElements(nuclides) : nuclides.map((n) => ({ kind: "nuclide", ...n })),
     sab: children(el, "sab").map((s) => ({ name: getText(s, "name"), fraction: Number(getText(s, "fraction", "1")) })),
     isotropic: getList(el, "isotropic", String) ?? [],
-    macroscopic: macro ? getText(macro, "name") : null,
-    cfg: getText(el, "cfg") ?? null,
   });
 }
 
@@ -368,11 +367,9 @@ export function materialToXML(mat) {
   const attrs = { id: mat.id, name: mat.name || undefined };
   if (mat.depletable) attrs.depletable = "true";
   if (mat.volume) attrs.volume = fmt(mat.volume);
-  if (mat.cfg) attrs.cfg = mat.cfg;
   if (mat.temperature != null) attrs.temperature = fmt(mat.temperature);
-  const kids = [element("density", units === "sum" || (units === "macro" && mat.density.value == null) ? { units } : { value: fmt(mat.density.value), units })];
-  if (mat.macroscopic) kids.push(element("macroscopic", { name: mat.macroscopic }));
-  else for (const n of expandMaterial(mat)) kids.push(element("nuclide", { name: n.name, [n.type]: fmt(n.percent) }));
+  const kids = [element("density", units === "sum" ? { units } : { value: fmt(mat.density.value), units })];
+  for (const n of expandMaterial(mat)) kids.push(element("nuclide", { name: n.name, [n.type]: fmt(n.percent) }));
   for (const s of mat.sab) kids.push(element("sab", s.fraction !== 1 ? { name: s.name, fraction: fmt(s.fraction) } : { name: s.name }));
   if (mat.isotropic.length) kids.push(element("isotropic", {}, [], mat.isotropic.join(" ")));
   return element("material", attrs, kids);
