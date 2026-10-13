@@ -72,7 +72,7 @@ npm run demo    # builder at http://localhost:1948/
   for a cone and OpenMC's composite surfaces; *Combine* has Union, Subtract, Intersect, Complement,
   Ungroup, Duplicate and Reference; *View* has Cutaway, the By material, Void,
   World box, Isolate and X-ray toggles, and Fit. The *Materials* ribbon has
-  New, Library…, Duplicate and Delete. When one operation, cell or universe is selected,
+  New, Add from library, Duplicate and Delete. When one operation, cell or universe is selected,
   new nodes go inside it.
 - **Top bar**: a *File* menu (New, Open… <kbd>Ctrl+O</kbd>, Save
   <kbd>Ctrl+S</kbd>, Export as → OpenMC XML…), *Settings* (light/dark theme or follow the OS,
@@ -188,7 +188,7 @@ The **Materials** tab edits the material library that cells reference by id
   fractions, with any OpenMC density unit (`g/cm3`, `kg/m3`, `atom/b-cm`,
   `atom/cm3`, `sum`, `macro`), S(α,β) tables, temperature, volume,
   depletable flag, isotropic nuclides, macroscopic and NCrystal options.
-- *Library…* adds any of the 411 reference materials of the PNNL compendium
+- *Add from library* (Materials ribbon) adds any of the 411 reference materials of the PNNL compendium
   (PNNL-15870 Rev. 2) that OpenMC bundles; *+ Formula* adds a chemical formula.
 - A live summary shows mass and atom densities, molar mass, element and
   nuclide breakdowns, validation errors, the cells using the material, and the
