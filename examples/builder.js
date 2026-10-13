@@ -2552,7 +2552,7 @@ for (const [id, name] of [["color-material", "palette"], ["void", "void"], ["wor
 // Materials ribbon: the library actions of the workspace's list panel.
 $("ribbon-mat-library").append(
   h("button", { class: "tb", title: "New empty material", onclick: () => materialsUI.newMaterial() }, icon("add"), h("span", { class: "label" }, "New")),
-  h("button", { class: "tb", title: "Add a reference material from the PNNL compendium bundled with OpenMC", onclick: () => materialsUI.openLibrary() }, icon("library"), h("span", { class: "label" }, "Add from library")),
+  h("button", { class: "tb", title: "Add a reference material from the PNNL compendium bundled with OpenMC", onclick: () => materialsUI.openLibrary() }, icon("library"), h("span", { class: "label" }, "From library")),
 );
 $("ribbon-mat-edit").append(
   h("button", { class: "tb", title: "Duplicate the selected material", onclick: () => $("mat-duplicate").click() }, icon("duplicate"), "Duplicate"),
@@ -3078,7 +3078,7 @@ function renderTutorial() {
       "ul",
       {},
       h("li", {}, "The ", b("Materials"), " tab holds the material library that cells refer to by id."),
-      h("li", {}, b("New"), " starts a material; ", b("Add from library"), " adds one of 411 reference materials (PNNL compendium, bundled with OpenMC)."),
+      h("li", {}, b("New"), " starts a material; ", b("From library"), " adds one of 411 reference materials (PNNL compendium, bundled with OpenMC)."),
       h("li", {}, "Add nuclides (", k("U235"), ") or elements (", k("Fe"), "), or a whole formula like ", k("UO2"), ". Elements can be enriched (⇅) and are expanded into natural isotopes on export, as OpenMC's Python API does."),
       h("li", {}, "The summary shows the mass and atom densities, the nuclide breakdown, problems OpenMC would reject, which cells use the material, and the exact XML."),
     ),
