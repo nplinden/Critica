@@ -268,3 +268,13 @@ test("bounds of intersections of oblique planes are exact", () => {
   close(tb.max[1], 2);
   assert.equal(tb.max[2], Infinity);
 });
+
+test("adding a material copy without an id allocates the next free id", () => {
+  const s = new Scene();
+  const a = s.addMaterial({ name: "water" });
+  const copy = s.addMaterial({ ...JSON.parse(JSON.stringify(a)), id: undefined, name: "water copy" });
+  assert.equal(copy.id, a.id + 1);
+  assert.equal(s.materials[copy.id], copy);
+  assert.equal(s.materials.undefined, undefined);
+  assert.equal(s.addMaterial({ id: 10 }).id, 10);
+});

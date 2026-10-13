@@ -495,8 +495,10 @@ export class Scene {
 
   /** Adds a material to the library with the next free id. */
   addMaterial(overrides = {}) {
-    const id = overrides.id ?? Math.max(0, ...Object.keys(this.materials).map(Number)) + 1;
-    const m = newMaterial(id, overrides);
+    const { id: wanted, ...rest } = overrides;
+    // No id given (or an explicit undefined, as when duplicating): the next free one.
+    const id = wanted ?? Math.max(0, ...Object.keys(this.materials).map(Number)) + 1;
+    const m = newMaterial(id, rest);
     this.materials[id] = m;
     return m;
   }
