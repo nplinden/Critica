@@ -147,13 +147,17 @@ function setTheme(pref) {
   themePref = pref;
   document.documentElement.dataset.theme = pref;
   viewer.setTheme(effectiveTheme());
+  if (showWorldBox) renderViewport(); // its wire color follows the theme
   try {
     localStorage.setItem(THEME_KEY, pref);
   } catch {
     // Storage unavailable: the choice lasts for this session.
   }
 }
-systemLight.addEventListener("change", () => viewer.setTheme(effectiveTheme()));
+systemLight.addEventListener("change", () => {
+  viewer.setTheme(effectiveTheme());
+  if (showWorldBox) renderViewport();
+});
 
 let scene = loadScene();
 let selection = []; // ordered ids; last one is the "primary" shown in properties
@@ -172,6 +176,14 @@ let nodeById = new Map();
 let isolate = false;
 let xray = true;
 let showVoid = false;
+const WORLD_BOX_KEY = "critica.builder.worldbox";
+let showWorldBox = (() => {
+  try {
+    return localStorage.getItem(WORLD_BOX_KEY) === "on";
+  } catch {
+    return false;
+  }
+})();
 let colorBy = "cell"; // "cell" | "material" (toggled with M)
 // Cutaway view (GPU clipping, no re-evaluation). Positions are per model axis.
 // `signs` choose which side of each axis is removed (+1: the side above pos).
@@ -513,6 +525,18 @@ function sectorWires(node) {
   return out;
 }
 
+/** The 12 edges of the world box: black, or light grey on the dark theme where black would vanish. */
+function worldBoxWires() {
+  const w = results.world;
+  if (!showWorldBox || !w) return [];
+  const color = effectiveTheme() === "light" ? [0, 0, 0] : [0.85, 0.87, 0.9];
+  const corner = (c) => [0, 1, 2].map((k) => ((c >> k) & 1 ? w.max[k] : w.min[k]));
+  const out = [];
+  for (let c = 0; c < 8; c++)
+    for (let k = 0; k < 3; k++) if (!((c >> k) & 1)) out.push({ from: corner(c), to: corner(c | (1 << k)), color });
+  return out;
+}
+
 const PLUS_COLOR = [0.95, 0.42, 0.32];
 const MINUS_COLOR = [0.32, 0.6, 0.98];
 
@@ -688,7 +712,7 @@ function renderViewport(fit) {
     marks.push(...sideMarks(d.surface, shellSamples(m, indices), null, tag));
     for (const v of indices) shellPoints.push([m.positions[v * 3], m.positions[v * 3 + 1], m.positions[v * 3 + 2]]);
   });
-  const wires = selection.flatMap((id) => sectorWires(nodeById.get(id)));
+  const wires = [...selection.flatMap((id) => sectorWires(nodeById.get(id))), ...worldBoxWires()];
   viewer.setGizmos({ planes, arrows, surfaces, marks, wires });
   // Fit should frame the sheets and shells too.
   const sheetPoints = [...planes.flatMap((p) => p.polygon), ...shellPoints];
@@ -2846,6 +2870,15 @@ $("void").onclick = () => {
   showVoid = !showVoid;
   refresh({ props: false });
 };
+$("world-box").onclick = () => {
+  showWorldBox = !showWorldBox;
+  try {
+    localStorage.setItem(WORLD_BOX_KEY, showWorldBox ? "on" : "off");
+  } catch {
+    // Storage unavailable: the toggle just resets next time.
+  }
+  refresh({ props: false });
+};
 
 // Drop a file anywhere to open it.
 document.addEventListener("dragover", (e) => {
@@ -2872,6 +2905,7 @@ function updateToolbar() {
   $("isolate").classList.toggle("on", isolate);
   $("xray").classList.toggle("on", xray);
   $("void").classList.toggle("on", showVoid);
+  $("world-box").classList.toggle("on", showWorldBox);
   $("color-material").classList.toggle("on", colorBy === "material");
 }
 
@@ -2896,6 +2930,7 @@ const SHORTCUTS = [
   { group: "View", keys: ["i"], label: "Isolate the selection", run: () => $("isolate").click() },
   { group: "View", keys: ["x"], label: "Toggle x-ray ghosts of hidden selections", run: () => $("xray").click() },
   { group: "View", keys: ["v"], label: "Show or hide void cells", run: () => $("void").click() },
+  { group: "View", keys: ["w"], label: "Show or hide the world box wireframe", run: () => $("world-box").click() },
   { group: "View", keys: ["m"], label: "Color by material (with a legend) or by cell", run: () => $("color-material").click() },
   { group: "View", keys: ["k"], label: "Toggle the cutaway (section, quarter or eighth cut)", run: () => setCutawayMode(cutaway.mode === "off" ? cutaway.lastMode : "off") },
   { group: "Help", keys: ["?"], global: true, label: "Show this list", run: () => openDialog("shortcuts") },

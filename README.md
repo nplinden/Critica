@@ -127,6 +127,8 @@ npm run demo    # builder at http://localhost:1948/
   delete, <kbd>Ctrl+D</kbd> duplicate, <kbd>U</kbd>/<kbd>S</kbd>/<kbd>N</kbd>/<kbd>C</kbd>
   (union/subtract/intersect/complement), <kbd>F</kbd> fit,
   <kbd>I</kbd> isolate, <kbd>X</kbd> x-ray, <kbd>V</kbd> show void cells,
+  <kbd>W</kbd> show the world box as a wireframe (*World*; black, light grey
+  on the dark theme),
   <kbd>M</kbd> color by material (with a legend) instead of by cell.
 - **Cutaway** (<kbd>K</kbd>): slice the view with a section plane along X/Y/Z,
   remove a quarter around an axis, or remove an eighth (one octant), with

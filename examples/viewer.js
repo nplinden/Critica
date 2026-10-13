@@ -23,11 +23,12 @@
 
 const VS = `#version 300 es
 in vec3 aPos; in vec3 aNormal; in vec3 aColor; in float aTag; in float aOpen; in float aLeaf;
-uniform mat4 uMvp; uniform mat4 uView; uniform mat4 uModel; uniform highp int uMode;
+uniform mat4 uMvp; uniform mat4 uView; uniform mat4 uModel; uniform highp int uMode; uniform float uBias;
 out vec3 vNormal; out vec3 vColor; out vec3 vPos; flat out float vTag; out float vOpen;
 void main() {
   vNormal = mat3(uView) * mat3(uModel) * aNormal; vColor = aColor; vTag = uMode == 5 ? aLeaf : aTag; vPos = aPos; vOpen = aOpen;
   gl_Position = uMvp * uModel * vec4(aPos, 1.0);
+  gl_Position.z -= uBias * gl_Position.w; // nudge toward the camera (lines over coincident faces)
 }`;
 
 const FS = `#version 300 es
@@ -140,7 +141,7 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
   gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FS));
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
-  const u = Object.fromEntries(["uMvp", "uView", "uModel", "uMode", "uTint", "uClipN", "uClip", "uBg"].map((n) => [n, gl.getUniformLocation(prog, n)]));
+  const u = Object.fromEntries(["uMvp", "uView", "uModel", "uMode", "uTint", "uClipN", "uClip", "uBg", "uBias"].map((n) => [n, gl.getUniformLocation(prog, n)]));
   const attribs = [
     ["aPos", 3],
     ["aNormal", 3],
@@ -413,6 +414,7 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
       // Construction lines: solid where visible, faint behind solids.
       gl.bindVertexArray(gizmoWires.vao);
       gl.uniform1i(u.uMode, 3);
+      gl.uniform1f(u.uBias, 2e-4);
       gl.drawArrays(gl.LINES, 0, gizmoWireCount);
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -421,6 +423,7 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
       gl.uniform1i(u.uMode, 6);
       gl.uniform4f(u.uTint, 1, 1, 1, 0.4);
       gl.drawArrays(gl.LINES, 0, gizmoWireCount);
+      gl.uniform1f(u.uBias, 0);
       gl.depthFunc(gl.LESS);
       gl.depthMask(true);
       gl.disable(gl.BLEND);
