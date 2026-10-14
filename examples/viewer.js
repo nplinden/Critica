@@ -432,7 +432,7 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
       gl.depthMask(false);
       gl.depthFunc(gl.GREATER);
       gl.uniform1i(u.uMode, 6);
-      gl.uniform4f(u.uTint, 1, 1, 1, 0.4);
+      gl.uniform4f(u.uTint, 1, 1, 1, 0.65);
       gl.drawArrays(gl.LINES, 0, gizmoWireCount);
       gl.uniform1f(u.uBias, 0);
       gl.depthFunc(gl.LESS);

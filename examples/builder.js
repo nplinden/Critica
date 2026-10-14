@@ -20,11 +20,13 @@ import {
 } from "./scene.js";
 import { SURFACE_TYPES, BOUNDARY_TYPES } from "./openmc/surfaces.js";
 import { compositeExpansion, isIdentity } from "./scene.js";
-import { importOpenMC, importMaterialsXML } from "./openmc/import.js";
-import { exportOpenMC, exportMaterialsXML, primitiveSurfaces } from "./openmc/export.js";
+import { importOpenMC, importMaterialsXML, importSettingsXML } from "./openmc/import.js";
+import { exportOpenMC, exportMaterialsXML, exportSettingsXML, primitiveSurfaces } from "./openmc/export.js";
 import { transformSurface, toForm, transformForm, isPlane, evaluate as evaluateSurface } from "./openmc/surfaces.js";
 import { fromTransform, multiply, IDENTITY, invert, transformPoint } from "./mat4.js";
 import { createMaterialsWorkspace } from "./materials-ui.js";
+import { createSourcesWorkspace } from "./sources-ui.js";
+import { sourceShape } from "./source/source.js";
 import { COMPOSITE_TYPES } from "./openmc/composite.js";
 
 const STORAGE_KEY = "critica.builder.scene.v2";
@@ -54,6 +56,8 @@ const ICONS = {
   isolate: '<circle cx="8" cy="8" r="2.6" fill="currentColor" fill-opacity=".45"/><circle cx="8" cy="8" r="6" stroke-dasharray="1.4 1.6"/>',
   xray: '<path d="M8 1.5 14 5v6l-6 3.5L2 11V5z M2 5l6 3.5L14 5 M8 8.5v6" stroke-dasharray="1.4 1.3"/>',
   add: '<path d="M8 3v10M3 8h10"/>',
+  srcpoint: '<circle cx="8" cy="8" r="2" fill="currentColor" fill-opacity=".5"/><path d="M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3M3.4 3.4l2.1 2.1M10.5 10.5l2.1 2.1M3.4 12.6l2.1-2.1M10.5 5.5l2.1-2.1"/>',
+  sources: '<circle cx="8" cy="8" r="1.6" fill="currentColor"/><circle cx="8" cy="8" r="4" stroke-dasharray="1.5 1.5"/><circle cx="8" cy="8" r="6.5" stroke-opacity=".5" stroke-dasharray="1.5 2"/>',
   axes: '<path d="M3 13V3M3 13h10M3 13l6-4" /><path d="M3 3 2 4.5M3 3l1 1.5M13 13l-1.5-1M13 13l-1.5 1"/>',
   grid: '<path d="M1.5 10.5 6 5.5h8.5L10 10.5z M3.8 8h8.9 M8.4 5.5 5.7 10.5 M11.3 5.5 8.6 10.5" stroke-opacity=".9"/>',
   xml: '<path d="M5.5 4 2 8l3.5 4M10.5 4 14 8l-3.5 4M9.2 2.5 6.8 13.5"/>',
@@ -325,6 +329,7 @@ function refresh({ props = true, fit = false } = {}) {
   else updateInfo();
   updateToolbar();
   if (activeTab === "materials") materialsUI.render();
+  if (activeTab === "sources") sourcesUI.render();
 }
 
 function meshOf(solid) {
@@ -551,6 +556,58 @@ function worldBoxWires() {
   return out;
 }
 
+const SOURCE_COLOR = [1.0, 0.45, 0.75];
+
+/**
+ * Wireframes of the external sources: a star for a point, the edges of a box,
+ * three great circles for a sphere, rims and four sides for a cylinder. Shown
+ * in the Source workspace, and in Geometry when View → Sources is on.
+ */
+function sourceWires() {
+  if (activeTab !== "sources" && !showSources) return [];
+  const w = results.world;
+  const size = w ? Math.max(...w.max.map((v, i) => v - w.min[i])) : 2;
+  const out = [];
+  const line = (from, to, color) => out.push({ from, to, color });
+  const add = (a, b) => a.map((v, i) => v + b[i]);
+  const scale = (a, k) => a.map((v) => v * k);
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const unit = (a) => scale(a, 1 / (Math.hypot(...a) || 1));
+  const circle = (center, u, v, r, color, segments = 48) => {
+    for (let k = 0; k < segments; k++) {
+      const p = (t) => add(center, add(scale(u, r * Math.cos(t)), scale(v, r * Math.sin(t))));
+      line(p((k / segments) * 2 * Math.PI), p(((k + 1) / segments) * 2 * Math.PI), color);
+    }
+  };
+  for (const src of scene.sources) {
+    const shape = sourceShape(src);
+    if (!shape) continue;
+    const color = activeTab === "sources" && src.id === sourcesUI.selected ? HIGHLIGHT : SOURCE_COLOR;
+    if (shape.kind === "point") {
+      const l = 0.03 * size;
+      for (const d of [[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 1], [1, -1, 1], [-1, 1, 1], [1, 1, -1]].map(unit)) line(add(shape.at, scale(d, -l)), add(shape.at, scale(d, l)), color);
+    } else if (shape.kind === "box") {
+      const corner = (c) => [0, 1, 2].map((k) => ((c >> k) & 1 ? shape.max[k] : shape.min[k]));
+      for (let c = 0; c < 8; c++) for (let k = 0; k < 3; k++) if (!((c >> k) & 1)) line(corner(c), corner(c | (1 << k)), color);
+    } else if (shape.kind === "sphere") {
+      const [x, y, z] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+      circle(shape.center, x, y, shape.radius, color);
+      circle(shape.center, x, z, shape.radius, color);
+      circle(shape.center, y, z, shape.radius, color);
+    } else if (shape.kind === "cylinder") {
+      const zDir = unit(shape.axis);
+      const rDir = unit(shape.rDir);
+      const pDir = cross(zDir, rDir);
+      const bottom = add(shape.center, scale(zDir, shape.z0));
+      const top = add(shape.center, scale(zDir, shape.z1));
+      circle(bottom, rDir, pDir, shape.radius, color);
+      circle(top, rDir, pDir, shape.radius, color);
+      for (const d of [rDir, pDir, scale(rDir, -1), scale(pDir, -1)]) line(add(bottom, scale(d, shape.radius)), add(top, scale(d, shape.radius)), color);
+    }
+  }
+  return out;
+}
+
 const PLUS_COLOR = [0.95, 0.42, 0.32];
 const MINUS_COLOR = [0.32, 0.6, 0.98];
 
@@ -726,7 +783,7 @@ function renderViewport(fit) {
     marks.push(...sideMarks(d.surface, shellSamples(m, indices), null, tag));
     for (const v of indices) shellPoints.push([m.positions[v * 3], m.positions[v * 3 + 1], m.positions[v * 3 + 2]]);
   });
-  const wires = [...selection.flatMap((id) => sectorWires(nodeById.get(id))), ...worldBoxWires()];
+  const wires = [...selection.flatMap((id) => sectorWires(nodeById.get(id))), ...worldBoxWires(), ...sourceWires()];
   viewer.setGizmos({ planes, arrows, surfaces, marks, wires });
   // Fit should frame the sheets and shells too.
   const sheetPoints = [...planes.flatMap((p) => p.polygon), ...shellPoints];
@@ -1480,7 +1537,10 @@ function openDialog(id) {
 
 $("settings-open").onclick = () => openDialog("settings");
 $("xml-preview-open").append(icon("xml"), h("span", { class: "label" }, "Preview XML"));
-$("xml-preview-open").onclick = () => openDialog("xml-preview");
+$("xml-preview-open").onclick = () => {
+  if (previewKind === "settings") previewKind = "geometry";
+  openDialog("xml-preview");
+};
 
 function renderProps() {
   keepFocus($("props"), renderPropsBody);
@@ -2428,6 +2488,7 @@ function download(name, data, type) {
 /** The XML File → Export as writes for `kind` ("geometry", "materials" or "model"), with its warnings. */
 function openmcXML(kind) {
   if (kind === "materials") return { text: exportMaterialsXML(scene), warnings: [] };
+  if (kind === "settings") return exportSettingsXML(scene);
   const out = exportOpenMC(scene);
   return { text: kind === "model" ? out.model : out.geometry, warnings: [...out.warnings, ...(kind === "model" ? (out.modelWarnings ?? []) : [])] };
 }
@@ -2436,6 +2497,7 @@ function exportXML(kind) {
   const { text, warnings } = openmcXML(kind);
   download(`${kind}.xml`, text, "application/xml");
   if (kind === "materials") setMessage(`Exported materials.xml (${Object.keys(scene.materials).length} materials).`);
+  else if (kind === "settings") setMessage(warnings.length ? `Exported settings.xml with ${warnings.length} warning(s): ${warnings.join(" ")}` : `Exported settings.xml (${scene.sources.length} source(s)).`, warnings.length > 0);
   else setMessage(warnings.length ? `Exported ${kind}.xml with ${warnings.length} warning(s): ${warnings.join(" ")}` : `Exported ${kind}.xml.`, warnings.length > 0);
 }
 
@@ -2468,7 +2530,7 @@ function renderXmlPreview() {
       h(
         "div",
         { class: "segmented", role: "tablist" },
-        [["geometry", "geometry.xml"], ["materials", "materials.xml"], ["model", "model.xml"]].map(([kind, label]) =>
+        [["geometry", "geometry.xml"], ["materials", "materials.xml"], ["settings", "settings.xml"], ["model", "model.xml"]].map(([kind, label]) =>
           h(
             "button",
             {
@@ -2507,6 +2569,20 @@ function replaceScene(next, message = "") {
 async function openFile(file) {
   const text = await file.text();
   if (/^\s*\{/.test(text)) return replaceScene(Scene.fromJSON(JSON.parse(text)));
+  // A settings.xml (no geometry): its sources replace the scene's, the rest is kept for export.
+  if (!/<geometry[\s>]/.test(text) && /<settings[\s>]/.test(text) && !/<model[\s>]/.test(text)) {
+    const imported = importSettingsXML(text);
+    if (imported) {
+      scene.sources = imported.sources;
+      scene.openmc.settings = imported.settings;
+      commit();
+      setTab("sources");
+      refresh({ props: false });
+      const note = `Imported ${imported.sources.length} source(s) and the settings of ${file.name}.`;
+      setMessage(imported.warnings.length ? `${note} ${imported.warnings.join(" ")}` : note, imported.warnings.length > 0);
+      return;
+    }
+  }
   // A materials.xml (no geometry) merges into the library of the current scene.
   if (!/<geometry[\s>]/.test(text)) {
     const lib = importMaterialsXML(text);
@@ -2721,6 +2797,27 @@ function setShowGrid(on) {
 setShowGrid(showGrid);
 $("grid-toggle").onclick = () => setShowGrid(!showGrid);
 
+// Draw the external sources in the Geometry workspace too; remembered per browser.
+const SOURCES_KEY = "critica.builder.sources";
+let showSources = true;
+try {
+  showSources = localStorage.getItem(SOURCES_KEY) !== "off";
+} catch {
+  // Storage unavailable: shown.
+}
+$("sources-toggle").prepend(icon("sources"));
+$("sources-toggle").classList.toggle("on", showSources);
+$("sources-toggle").onclick = () => {
+  showSources = !showSources;
+  $("sources-toggle").classList.toggle("on", showSources);
+  try {
+    localStorage.setItem(SOURCES_KEY, showSources ? "on" : "off");
+  } catch {
+    // Storage unavailable: the choice lasts for this session.
+  }
+  renderViewport();
+};
+
 // Axis lines toggle; remembered per browser.
 const AXES_KEY = "critica.builder.axes";
 let showAxes = true;
@@ -2752,6 +2849,32 @@ $("ribbon-mat-edit").append(
   h("button", { class: "tb", title: "Delete the selected material", onclick: () => materialsUI.deleteMaterial() }, icon("trash"), h("span", { class: "label" }, "Delete")),
 );
 
+// Source ribbon: add, duplicate and delete sources, preview the settings.
+const sourceButton = (label, iconName, title, onclick) => h("button", { class: "tb", title, onclick }, icon(iconName), h("span", { class: "label" }, label));
+$("ribbon-src-add").append(
+  sourceButton("Point", "srcpoint", "Add an isotropic point source at the middle of the world box", () => run(() => sourcesUI.addSource("point"))),
+  sourceButton("Box", "cube", "Add a source sampled uniformly in a box", () => run(() => sourcesUI.addSource("box"))),
+  sourceButton("Sphere", "sphere", "Add a source sampled uniformly in a sphere", () => run(() => sourcesUI.addSource("spherical"))),
+  sourceButton("Cylinder", "cylinder", "Add a source sampled uniformly in a cylinder along z", () => run(() => sourcesUI.addSource("cylindrical"))),
+  flyoutButton({
+    id: "source-others",
+    iconName: "more",
+    label: "Others",
+    title: "Other spatial distributions",
+    items: [{ label: "Cartesian (x, y, z)", title: "Independent distributions of x, y and z", run: () => sourcesUI.addSource("cartesian") }],
+  }),
+);
+$("ribbon-src-edit").append(
+  sourceButton("Duplicate", "duplicate", "Duplicate the selected source", () => run(() => sourcesUI.duplicateSource())),
+  sourceButton("Delete", "trash", "Delete the selected source", () => run(() => sourcesUI.deleteSource())),
+);
+$("ribbon-src-openmc").append(
+  sourceButton("Preview XML", "xml", "Show the settings.xml that File → Export as would write", () => {
+    previewKind = "settings";
+    openDialog("xml-preview");
+  }),
+);
+
 // The ribbon can be collapsed to give the canvas more room; remembered.
 const RIBBON_KEY = "critica.builder.ribbon";
 function setRibbon(open) {
@@ -2775,7 +2898,7 @@ try {
 setRibbon(ribbonOpen);
 $("ribbon-toggle").onclick = () => setRibbon($("ribbon").classList.contains("collapsed"));
 // Double-clicking the active tab also collapses or expands it, as in office suites.
-for (const t of ["geometry", "materials"]) $(`tab-${t}`).addEventListener("dblclick", () => setRibbon($("ribbon").classList.contains("collapsed")));
+for (const t of ["geometry", "materials", "sources"]) $(`tab-${t}`).addEventListener("dblclick", () => setRibbon($("ribbon").classList.contains("collapsed")));
 
 // ---- Menus (File, Help) ----
 // Desktop-style dropdowns: click to open, hover entries with ▸ to open their
@@ -2865,6 +2988,7 @@ $("save").onclick = () => download("scene.critica.json", JSON.stringify(scene, n
 $("export-model").onclick = () => run(exportXML, "model");
 $("export-geometry").onclick = () => run(exportXML, "geometry");
 $("export-materials").onclick = () => run(exportXML, "materials");
+$("export-settings").onclick = () => run(exportXML, "settings");
 
 // ---- workspaces ----
 const TAB_KEY = "critica.builder.tab";
@@ -2881,16 +3005,39 @@ const materialsUI = createMaterialsWorkspace({
   setMessage,
 });
 
+const sourcesUI = createSourcesWorkspace({
+  scene: () => scene,
+  commit,
+  changed: () => schedule(),
+  icon,
+  setMessage,
+  // New sources go at the middle of the world box, a quarter of its size.
+  frame: () => {
+    const w = results.world;
+    if (!w) return { center: [0, 0, 0], half: 1 };
+    const center = w.min.map((v, i) => (v + w.max[i]) / 2);
+    const half = Math.max(1e-3, 0.25 * Math.max(...w.max.map((v, i) => v - w.min[i])));
+    return { center, half: Number(half.toPrecision(2)) };
+  },
+});
+
 function setTab(tab) {
   activeTab = tab;
-  for (const t of ["geometry", "materials"]) {
+  // The Source workspace shows the geometry viewport too: move it there and back.
+  if (tab === "sources") $("src-view-slot").append($("view"));
+  else if (tab === "geometry") $("ws-geometry").insertBefore($("view"), $("props"));
+  for (const t of ["geometry", "materials", "sources"]) {
     $(`ws-${t}`).hidden = t !== tab;
     $(`ribbon-${t}`).hidden = t !== tab;
     $(`tab-${t}`).classList.toggle("on", t === tab);
     $(`tab-${t}`).setAttribute("aria-selected", String(t === tab));
   }
   if (tab === "materials") materialsUI.render();
-  else viewer.redraw();
+  else {
+    if (tab === "sources") sourcesUI.render();
+    renderViewport(); // sources are always drawn in the Source workspace
+    viewer.redraw();
+  }
   try {
     localStorage.setItem(TAB_KEY, tab);
   } catch {
@@ -2899,6 +3046,7 @@ function setTab(tab) {
 }
 $("tab-geometry").onclick = () => setTab("geometry");
 $("tab-materials").onclick = () => setTab("materials");
+$("tab-sources").onclick = () => setTab("sources");
 $("open").onclick = () => $("file").click();
 $("file").onchange = async (e) => {
   const file = e.target.files[0];
@@ -3200,7 +3348,8 @@ document.addEventListener("keydown", (e) => {
   const shortcut = SHORTCUTS.find((s) => s.keys.includes(combo));
   if (!shortcut) return;
   // Geometry shortcuts (selection, combine, view) do nothing on the Materials tab.
-  if (activeTab === "materials" && !shortcut.global) return;
+  // Geometry shortcuts work in Geometry; the Source tab (which shows the viewport) keeps the View ones.
+  if (!shortcut.global && activeTab !== "geometry" && !(activeTab === "sources" && shortcut.group === "View")) return;
   e.preventDefault();
   shortcut.run();
 });
@@ -3258,6 +3407,7 @@ function renderTutorial() {
       h("li", {}, b("Cell"), " (above the scene tree) wraps a shape into a cell; give it a material id, ", k("void"), ", or fill it with a universe."),
       h("li", {}, b("Universe"), " adds a universe that cells can be filled with; set the fill translation and rotation on the cell."),
       h("li", {}, "Void cells are hidden in the viewport; toggle ", b("Void"), " to show them. ", b("Materials"), " (", k("M"), ") colors cells by material and shows a legend."),
+      h("li", {}, "The ", b("Source"), " tab defines the external source: a point, box, sphere or cylinder with its particle, energy spectrum (eV), direction and constraints, drawn in the viewport. It is written into the settings of model.xml or settings.xml."),
     ),
     h("h3", {}, "4 · Look around"),
     h(
@@ -3292,7 +3442,8 @@ function renderTutorial() {
 commit();
 refresh({ fit: true });
 try {
-  if ((localStorage.getItem(TAB_KEY) ?? localStorage.getItem("geomium.builder.tab")) === "materials") setTab("materials");
+  const savedTab = localStorage.getItem(TAB_KEY) ?? localStorage.getItem("geomium.builder.tab");
+  if (savedTab === "materials" || savedTab === "sources") setTab(savedTab);
 } catch {
   // Storage unavailable: start on Geometry.
 }

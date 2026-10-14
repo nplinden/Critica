@@ -9,6 +9,7 @@
 // priority: an earlier item wins where it overlaps a later one (OpenMC cells
 // must not overlap; imported cells are assumed not to overlap each other).
 
+import { settingsWithSources } from "../source/source.js";
 import { element, xmlDocument, getText } from "./xml.js";
 import { formatRegion } from "./region.js";
 import { toForm, fromForm, transformForm, clean } from "./surfaces.js";
@@ -357,10 +358,32 @@ export function exportOpenMC(scene, { worldBoundary = "auto" } = {}) {
   const matSection = materialsEl ?? originalMaterials ?? null;
   if (matSection) sections.push(matSection);
   sections.push(geometry);
-  for (const s of preservedSections) if (s && s.name !== "materials" && s.name !== "geometry") sections.push(s);
-  if (!sections.some((s) => s.name === "settings")) result.modelWarnings = ["model.xml has no <settings> section; add one before running OpenMC."];
+  const settings = settingsFor(scene);
+  for (const s of preservedSections) if (s && s.name !== "materials" && s.name !== "geometry" && s.name !== "settings") sections.push(s);
+  if (settings.element) sections.splice(sections.indexOf(geometry) + 1, 0, settings.element);
+  result.modelWarnings = settings.warnings;
   result.model = xmlDocument(element("model", {}, sections));
   return result;
+}
+
+/**
+ * The <settings> to export: the opened model's or settings.xml's settings (if
+ * any) with their sources replaced by the scene's. { element|null, warnings }.
+ */
+function settingsFor(scene) {
+  const base = (scene.openmc.model?.sections ?? []).find((s) => s?.name === "settings") ?? scene.openmc.settings ?? null;
+  const sources = scene.sources ?? [];
+  if (!base && !sources.length) return { element: null, warnings: ["model.xml has no <settings> section; add one before running OpenMC."] };
+  const warnings = [];
+  if (!base) warnings.push("The settings only hold the sources: add a run mode, particles and batches before running OpenMC.");
+  return { element: settingsWithSources(base, sources, warnings), warnings };
+}
+
+/** settings.xml: the kept settings with the scene's sources (throws when there is nothing to write). */
+export function exportSettingsXML(scene) {
+  const { element: el, warnings } = settingsFor(scene);
+  if (!el) throw new Error("there are no settings or sources to export: add a source in the Source tab");
+  return { text: xmlDocument(el), warnings };
 }
 
 /** Just the library as materials.xml (throws if a material is invalid). */

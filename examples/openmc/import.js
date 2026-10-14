@@ -12,6 +12,7 @@ import { parseXML, getText, getList, children } from "./xml.js";
 import { parseRegion, formatRegion } from "./region.js";
 import { validateSurface } from "./surfaces.js";
 import { rotationToOpenMCAngles } from "../mat4.js";
+import { sourceFromXML } from "../source/source.js";
 import { materialFromXML, normalizeMaterial } from "../materials/material.js";
 
 const BOUNDARY_ALIASES = { transmit: "transmission", reflect: "reflective", reflecting: "reflective", "": "transmission" };
@@ -29,6 +30,28 @@ function locate(roots) {
     }
   }
   throw new Error("no <geometry> element found");
+}
+
+/** The <source> elements of a <settings> element, as scene sources. */
+export function readSources(settingsEl, warnings = []) {
+  return children(settingsEl, "source").map((el, i) => {
+    const src = sourceFromXML(el, i + 1);
+    if (src.raw) warnings.push(`Source ${i + 1} is a ${src.kind} source: kept for export but not editable.`);
+    return src;
+  });
+}
+
+/**
+ * Reads a standalone settings.xml: its sources, and the rest of the settings
+ * (without the sources) to write back on export. Null when there is no <settings>.
+ */
+export function importSettingsXML(text) {
+  const roots = parseXML(text);
+  const el = roots.find((r) => r.name === "settings");
+  if (!el) return null;
+  const warnings = [];
+  const sources = readSources(el, warnings);
+  return { sources, settings: { ...el, children: el.children.filter((c) => c.name !== "source") }, warnings };
 }
 
 /** Reads a <materials> element into a library keyed by id. */
@@ -134,12 +157,17 @@ export function importOpenMC(text, { fileName } = {}) {
     rootUniverse = candidates.includes(0) ? 0 : candidates[0];
     warnings.push(`Several universes are not referenced by any cell (${candidates.join(", ")}); using ${rootUniverse} as the root.`);
   }
+  // External sources become editable; the rest of <settings> is kept as is
+  // and gets the scene's sources back on export.
+  const settingsEl = model ? children(model, "settings")[0] : roots.find((r) => r.name === "settings");
+  if (settingsEl) scene.sources = readSources(settingsEl, warnings);
+  const stripSources = (c) => (c.name === "settings" ? { ...c, children: c.children.filter((k) => k.name !== "source") } : c);
   scene.openmc = {
     ...scene.openmc,
     rootUniverse,
     preserved,
     source: fileName,
-    model: model ? { sections: model.children.map((c) => (c.name === "geometry" ? null : c)) } : undefined,
+    model: model ? { sections: model.children.map((c) => (c.name === "geometry" ? null : stripSources(c))) } : undefined,
   };
 
   // Universe nodes first, so fills can reference them.

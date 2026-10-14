@@ -102,6 +102,37 @@ validation and formulas. It also imports, validates and re-exports all 1484
 materials of the 409 `materials.xml` files in `knowledge/benchmarks`,
 comparing each nuclide with the original, and builds all 411 PNNL materials.
 
+## Sources
+
+`examples/source/source.js` mirrors `openmc.IndependentSource` and the
+`openmc.stats` distributions, following `docs/source/io_formats/settings.rst`
+and the Python writers (which differ slightly from the docs):
+
+- **Format.** `<source type="independent" strength particle>` with `<space>`,
+  `<angle>`, `<energy>`, optional `<time>` and `<constraints>`. Uniform, power
+  law, Maxwell, Watt and normal distributions write `parameters` as an
+  attribute; discrete and tabular write a `<parameters>` element (all x, then
+  all p). The spherical space uses `cos_theta` (as the C++ reader and Python
+  writer do), not the `theta` of the docs. A fissionable box is
+  `type="fission"`.
+- **Coordinates.** Spherical: r, cos θ, φ around `origin`. Cylindrical:
+  r·(cos φ·r_dir + sin φ·(z_dir × r_dir)) + z·z_dir + origin
+  (`src/distribution_spatial.cpp`), so z is relative to the origin.
+- **Defaults when absent.** Point at the origin, isotropic angle, and a Watt
+  spectrum with a = 0.988 MeV, b = 2.249 MeV⁻¹; particles born at t = 0.
+- **Round trip.** Numbers are written in their shortest exact form. Other
+  source types (file, compiled, mesh, tokamak) and unsupported pieces
+  (mixture, decay spectrum, Legendre, biased sampling, `reference_vwu`, mesh
+  and point-cloud spaces) are kept as XML and written back unchanged. On
+  import the `<source>` elements leave the preserved `<settings>`; on export
+  the scene's sources are put back in their place, and an invalid source is
+  skipped with a warning instead of blocking the export.
+
+`js-tests/source.test.mjs` round-trips every space, angle and distribution
+type, checks validation, settings merging and model/settings import-export,
+and round-trips the 614 sources of the ICSBEP `settings.xml` files and the
+OpenMC regression inputs.
+
 ## Conventions (checked against the OpenMC source)
 
 - **Half-space membership** (`openmc.Halfspace.__contains__`): a point

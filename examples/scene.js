@@ -23,10 +23,13 @@
 //   world       bounding box for unbounded half-spaces; auto-computed by default
 //   materials   material library keyed by id (see materials/material.js)
 //   openmc      round-trip data: root universe id, preserved XML elements
+//   sources     external source distributions (examples/source/source.js), written
+//               into the <settings> of model.xml / settings.xml
 //
 // Polygon tags are node ids: every face maps back to the node (primitive, half-
 // space, or cell) that produced it, for colouring and viewport picking.
 
+import { newSource } from "./source/source.js";
 import { SURFACE_TYPES, classifyQuadric, halfspaceBounds, infiniteBox, isPlane, axisOf } from "./openmc/surfaces.js";
 import { intersectBoxes, unionBoxes, emptyBox, regionBounds as astBounds, linearConstraint, refineByPlanes } from "./openmc/region.js";
 import { COMPOSITE_TYPES, defaultCompositeParams, expandComposite } from "./openmc/composite.js";
@@ -91,6 +94,7 @@ export class Scene {
     this.world = DEFAULT_WORLD();
     this.materials = {};
     this.openmc = {};
+    this.sources = [];
     this.nextId = 1;
   }
 
@@ -522,6 +526,14 @@ export class Scene {
     return copy;
   }
 
+  /** Adds an external source (see examples/source/source.js) with the next free id. */
+  addSource(spaceType = "point", options = {}) {
+    const id = Math.max(0, ...this.sources.map((s) => s.id)) + 1;
+    const src = newSource(id, spaceType, options);
+    this.sources.push(src);
+    return src;
+  }
+
   /** Adds a material to the library with the next free id. */
   addMaterial(overrides = {}) {
     const { id: wanted, ...rest } = overrides;
@@ -702,6 +714,7 @@ export class Scene {
       world: this.world,
       materials: this.materials,
       openmc: this.openmc,
+      sources: this.sources,
     };
   }
 
@@ -713,6 +726,7 @@ export class Scene {
     scene.world = { ...DEFAULT_WORLD(), ...(data.world ?? {}) };
     scene.materials = Object.fromEntries(Object.entries(data.materials ?? {}).map(([id, m]) => [id, normalizeMaterial(id, m)]));
     scene.openmc = clone(data.openmc ?? {});
+    scene.sources = clone(data.sources ?? []);
     let maxId = 0;
     scene.walk((n) => {
       maxId = Math.max(maxId, n.id);

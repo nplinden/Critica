@@ -162,6 +162,22 @@
   .ribbon-menu .tb + .ribbon-menu-title { margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
   .ribbon-menu-title { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 2px 8px 6px; }
 
+  /* ---- source workspace (the geometry viewport moves into #src-view-slot) ---- */
+  .sources-main { grid-template-columns: 250px 1fr 340px; }
+  #src-list-panel { border-right: 1px solid var(--line); }
+  #src-list { flex: 1; overflow-y: auto; padding-bottom: 8px; }
+  #src-list .mat-row svg.icon { width: 15px; height: 15px; }
+  #src-view-slot { position: relative; min-width: 0; min-height: 0; display: grid; }
+  #src-view-slot > #view { min-height: 0; }
+  #src-side { border-left: 1px solid var(--line); overflow-y: auto; }
+  #src-editor { display: flex; flex-direction: column; }
+  #src-editor .dist { display: contents; }
+  #src-summary { border-bottom: 0; }
+  #src-summary .xml-preview { max-height: 320px; }
+  #src-summary summary { cursor: pointer; color: var(--muted); font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; margin: 8px 0 6px; }
+  .preset-row { flex-wrap: wrap; }
+  .preset-row .tb { font-size: 11.5px; padding: 2px 7px; }
+
   /* ---- materials workspace ---- */
   .materials-main { display: grid; grid-template-columns: 280px minmax(420px, 1fr) 360px; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
   .mat-status { grid-column: 1 / -1; min-height: 24px; padding: 4px 12px; border-top: 1px solid var(--line); background: var(--panel); color: var(--muted); font-size: 12px; }
@@ -314,6 +330,7 @@
             <button class="menu-item" role="menuitem" id="export-model" title="Materials, geometry and any settings/tallies from the opened file">OpenMC model.xml…</button>
             <button class="menu-item" role="menuitem" id="export-geometry" title="Just the geometry">OpenMC geometry.xml…</button>
             <button class="menu-item" role="menuitem" id="export-materials" title="Just the material library">OpenMC materials.xml…</button>
+            <button class="menu-item" role="menuitem" id="export-settings" title="The settings with the external sources">OpenMC settings.xml…</button>
           </div>
         </div>
       </div>
@@ -330,6 +347,7 @@
   <div class="tabs" role="tablist" aria-label="Workspace">
     <button class="tab on" role="tab" id="tab-geometry" aria-selected="true" aria-controls="ribbon-geometry">Geometry</button>
     <button class="tab" role="tab" id="tab-materials" aria-selected="false" aria-controls="ribbon-materials">Materials</button>
+    <button class="tab" role="tab" id="tab-sources" aria-selected="false" aria-controls="ribbon-sources">Source</button>
   </div>
   <span class="spacer"></span>
   <button class="tb ribbon-toggle" id="ribbon-toggle" title="Collapse the ribbon" aria-expanded="true">▴</button>
@@ -354,12 +372,18 @@
           <button class="tb" id="xray" title="Show hidden selected nodes as an x-ray ghost (X)">X-ray</button>
           <button class="tb" id="grid-toggle" title="Show the grid plane (G)">Grid</button>
           <button class="tb" id="axes-toggle" title="Show the X, Y and Z axis lines (A)">Axes</button>
+          <button class="tb" id="sources-toggle" title="Show the external sources (Source tab) in the viewport">Sources</button>
         </div>
         <button class="tb big" id="fit" title="Frame the visible geometry (F)"></button>
       </div>
       <div class="rgroup-label">View</div>
     </div>
     <div class="rgroup"><div class="rgroup-body big"><button class="tb" id="xml-preview-open" title="Show the OpenMC XML that File → Export as would write"></button></div><div class="rgroup-label">OpenMC</div></div>
+  </div>
+  <div class="ribbon-panel" id="ribbon-sources" role="tabpanel" aria-labelledby="tab-sources" hidden>
+    <div class="rgroup"><div class="rgroup-body big" id="ribbon-src-add"></div><div class="rgroup-label">Add source</div></div>
+    <div class="rgroup"><div class="rgroup-body big" id="ribbon-src-edit"></div><div class="rgroup-label">Source</div></div>
+    <div class="rgroup"><div class="rgroup-body big" id="ribbon-src-openmc"></div><div class="rgroup-label">OpenMC</div></div>
   </div>
   <div class="ribbon-panel" id="ribbon-materials" role="tabpanel" aria-labelledby="tab-materials" hidden>
     <div class="rgroup"><div class="rgroup-body big" id="ribbon-mat-library"></div><div class="rgroup-label">Library</div></div>
@@ -406,6 +430,17 @@
     <div id="status"><span id="msg">loading…</span><span id="stats"></span></div>
   </section>
   <aside class="panel" id="props"></aside>
+</main>
+<main id="ws-sources" class="sources-main" role="tabpanel" aria-labelledby="tab-sources" hidden>
+  <section class="panel" id="src-list-panel">
+    <h2>Sources</h2>
+    <div id="src-list"></div>
+  </section>
+  <div id="src-view-slot"></div>
+  <aside class="panel" id="src-side">
+    <div id="src-editor"></div>
+    <div class="section" id="src-summary"></div>
+  </aside>
 </main>
 <main id="ws-materials" class="materials-main" role="tabpanel" aria-labelledby="tab-materials" hidden>
   <section class="panel" id="mat-list-panel">

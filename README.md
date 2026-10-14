@@ -218,6 +218,33 @@ Nuclear data (natural abundances, AME2020 masses, thermal table names) and the
 PNNL library are generated from an OpenMC checkout with `npm run gen:data`
 (`tools/gen_nuclear_data.py`).
 
+### Sources
+
+The **Source** tab edits the external source distributions written into
+OpenMC's `<settings>` (`openmc.IndependentSource`). The geometry viewport is
+shown alongside, with each source drawn as a pink wireframe (the selected one
+highlighted); *View → Sources* draws them in the Geometry tab too.
+
+- *Add source*: *Point*, *Box*, *Sphere*, *Cylinder* (uniform in the volume,
+  as `openmc.stats.spherical_uniform` / `cylindrical_uniform`), and
+  *Others ▾ → Cartesian*. New sources are centred on the world box.
+- Each source has a particle type, a relative strength, and space, angle,
+  energy and time distributions. Space: point, box (optionally fissionable
+  sites only), spherical (r, cos θ, φ), cylindrical (r, φ, z) or cartesian
+  (x, y, z). Angle: isotropic, monodirectional or μ/φ. Distributions:
+  discrete, uniform, power law, Maxwell, Watt, normal and tabular, with energy
+  presets (Watt fission, 14.1 MeV D-T, 2.45 MeV D-D, Maxwell). Energies are in
+  eV; the default is OpenMC's Watt spectrum.
+- *Constraints*: domains (cell, material or universe ids), fissionable only,
+  energy and time windows, and the rejection strategy.
+- A live summary validates the source and shows its exact XML.
+- *File → Open* a `model.xml` or a `settings.xml` to edit its sources; the rest
+  of the settings is kept and the sources are written back in place on
+  export (*Export as → settings.xml* or *model.xml*, also in *Preview XML*).
+  File, compiled, mesh and tokamak sources, and distributions Critica does
+  not edit (mixtures, decay spectra, biased sampling, mesh and point-cloud
+  spaces), are kept verbatim.
+
 See [docs/openmc.md](docs/openmc.md) for the mapping, the conventions checked
 against OpenMC's source, and the extension points planned for lattices.
 
