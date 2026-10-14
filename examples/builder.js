@@ -3488,10 +3488,19 @@ function renderTutorial() {
 }
 
 commit();
-refresh({ fit: true });
+// Show the interface first: building the CSG solids of a large scene takes a
+// moment (about 1.5 s for a 22-cell benchmark), and the page used to stay
+// blank until it was done.
+scene.walk((n) => nodeById.set(n.id, n));
+setMessage("Building geometry…");
+renderTree();
+renderProps();
+updateToolbar();
 try {
   const savedTab = localStorage.getItem(TAB_KEY) ?? localStorage.getItem("geomium.builder.tab");
   if (["materials", "sources", "settings"].includes(savedTab)) setTab(savedTab);
 } catch {
   // Storage unavailable: start on Geometry.
 }
+// Two frames: the first paints the interface, the second builds the geometry.
+requestAnimationFrame(() => requestAnimationFrame(() => refresh({ fit: true })));
