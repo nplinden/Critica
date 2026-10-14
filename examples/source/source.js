@@ -10,9 +10,10 @@
 //         | { type: "cylindrical", origin, r: Dist, phi: Dist, z: Dist, rDir?, zDir? }
 //         | { type: "cartesian", x: Dist, y: Dist, z: Dist }
 //         | { type: "raw", xml }      // mesh, cloud, …: kept verbatim
-//   angle:  { type: "isotropic" } | { type: "monodirectional", uvw }
+//   angle:  null                    // OpenMC's default: isotropic
+//         | { type: "isotropic" } | { type: "monodirectional", uvw }
 //         | { type: "mu-phi", uvw, mu: Dist, phi: Dist } | { type: "raw", xml }
-//   energy: Dist,                   // eV
+//   energy: Dist | null,            // eV; null = OpenMC's default Watt spectrum
 //   time:   Dist | null,            // s; null = born at t = 0
 //   constraints: { domainType, domainIds, fissionable, energyBounds, timeBounds, rejectionStrategy }
 // }
@@ -109,8 +110,10 @@ export function newSource(id, spaceType = "point", { size = 1, ...overrides } = 
     strength: 1,
     particle: "neutron",
     space: defaultSpace(spaceType, size),
-    angle: { type: "isotropic" },
-    energy: WATT_DEFAULT(),
+    // Unset: OpenMC's defaults (isotropic, Watt fission spectrum), which is
+    // all most multiplying systems need.
+    angle: null,
+    energy: null,
     time: null,
     constraints: blankConstraints(),
     ...overrides,
@@ -178,7 +181,7 @@ export function validateSource(src) {
     if (s.r && ["uniform", "powerlaw"].includes(s.r.type) && s.r.a < 0) errors.push("r cannot be negative");
   }
   if (s.type === "cartesian") for (const k of ["x", "y", "z"]) distErrors(s[k], k, errors);
-  const a = src.angle;
+  const a = src.angle ?? { type: "isotropic" };
   if (a.type === "monodirectional" || a.type === "mu-phi") {
     if (!vec3(a.uvw) || !(Math.hypot(...a.uvw) > 0)) errors.push("angle: the direction must be a non-zero vector");
   }
@@ -186,7 +189,7 @@ export function validateSource(src) {
     distErrors(a.mu, "μ", errors);
     distErrors(a.phi, "φ (angle)", errors);
   }
-  distErrors(src.energy, "energy", errors);
+  if (src.energy) distErrors(src.energy, "energy", errors);
   if (["uniform", "powerlaw", "discrete", "tabular"].includes(src.energy?.type)) {
     const lows = src.energy.type === "uniform" || src.energy.type === "powerlaw" ? [src.energy.a] : src.energy.x;
     if (lows.some((x) => x <= 0)) errors.push("energy: values must be positive (eV)");
@@ -349,7 +352,10 @@ export function sourceToXML(src) {
   if (src.raw) return src.raw;
   const { errors } = validateSource(src);
   if (errors.length) throw new Error(`source "${src.name}": ${errors[0]}`);
-  const kids = [spaceToXML(src.space), angleToXML(src.angle), distToXML(src.energy, "energy")];
+  // Unset angle, energy and time are left out: OpenMC applies its defaults.
+  const kids = [spaceToXML(src.space)];
+  if (src.angle) kids.push(angleToXML(src.angle));
+  if (src.energy) kids.push(distToXML(src.energy, "energy"));
   if (src.time) kids.push(distToXML(src.time, "time"));
   const c = src.constraints;
   const ck = [];
@@ -390,10 +396,10 @@ export function sourceFromXML(el, id) {
     name,
     strength: Number(getText(el, "strength", "1")),
     particle: PARTICLE_ALIASES[particle] ?? particle,
-    // OpenMC's defaults when an element is absent.
+    // Absent elements stay unset (OpenMC's defaults); a missing space is a point at the origin.
     space: space ? spaceFromXML(space) : defaultSpace("point"),
-    angle: angle ? angleFromXML(angle) : { type: "isotropic" },
-    energy: energy ? distFromXML(energy) : WATT_DEFAULT(),
+    angle: angle ? angleFromXML(angle) : null,
+    energy: energy ? distFromXML(energy) : null,
     time: time ? distFromXML(time) : null,
     constraints,
   };

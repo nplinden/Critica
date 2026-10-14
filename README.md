@@ -230,8 +230,11 @@ highlighted); *View → Sources* draws them in the Geometry tab too.
 - *Add source*: *Point*, *Box*, *Sphere*, *Cylinder* (uniform in the volume,
   as `openmc.stats.spherical_uniform` / `cylindrical_uniform`), and
   *Others ▾ → Cartesian*. New sources are centred on the world box.
-- Each source has a particle type, a relative strength, and space, angle,
-  energy and time distributions. Space: point, box (optionally fissionable
+- Each source has a particle type, a relative strength and a spatial
+  distribution. Angle, energy and time are left to OpenMC's defaults
+  (isotropic, Watt fission spectrum, born at t = 0) and not written, which is
+  all most multiplying systems need; *+ Set …* adds an explicit distribution
+  and ✕ goes back to the default. Space: point, box (optionally fissionable
   sites only), spherical (r, cos θ, φ), cylindrical (r, φ, z) or cartesian
   (x, y, z). Angle: isotropic, monodirectional or μ/φ. Distributions:
   discrete, uniform, power law, Maxwell, Watt, normal and tabular, with energy

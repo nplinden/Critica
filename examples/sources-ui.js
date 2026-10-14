@@ -185,6 +185,24 @@ export function createSourcesWorkspace(ctx) {
     }
   }
 
+  /** A section whose distribution may be left to OpenMC's default: a note and a button, or the editor and a ✕. */
+  function optional(title, value, { defaultNote, addLabel, addTitle, add, remove, extra = null }, editor) {
+    if (!value)
+      return section(
+        title,
+        h("div", { class: "note" }, defaultNote),
+        h("div", { class: "props-actions" }, h("button", { class: "tb", title: addTitle, onclick: () => edit(add) }, `+ ${addLabel}`)),
+        extra,
+      );
+    return h(
+      "div",
+      { class: "section" },
+      h("h3", { class: "with-action" }, title, h("button", { class: "tb icon-btn", title: "Remove: use OpenMC's default", onclick: () => edit(remove) }, "✕")),
+      editor(),
+      extra,
+    );
+  }
+
   function angleFields(a) {
     if (a.type === "monodirectional") return [vec("Direction", "angle.uvw", a.uvw, "Direction of flight (u, v, w); any length, OpenMC normalizes it")];
     if (a.type === "mu-phi")
@@ -219,7 +237,7 @@ export function createSourcesWorkspace(ctx) {
       const parts = [
         h("h2", {}, "Source"),
         section(
-          "Source",
+          "General",
           field("Name", text("name", s.name), "Shown in Critica only: OpenMC sources have no names"),
           field("Particle", sel("particle", PARTICLES.map((p) => [p, p, PARTICLE_TIPS[p]]), s.particle), "Type of particle emitted"),
           field("Strength", num("strength", s.strength, { min: 0 }), "Relative probability of this source among all sources"),
@@ -229,20 +247,46 @@ export function createSourcesWorkspace(ctx) {
           field("Type", sel("space.type", s.space.type === "raw" ? [["raw", s.space.label], ...spaceTypes] : spaceTypes, s.space.type), `Where particles are born. ${SPACE_TIPS[s.space.type] ?? ""}`),
           spaceFields(s.space),
         ),
-        section(
+        optional(
           "Angle",
-          field("Type", sel("angle.type", s.angle.type === "raw" ? [["raw", s.angle.label], ...angleTypes] : angleTypes, s.angle.type), `Directions particles fly off in. ${ANGLE_TIPS[s.angle.type] ?? ""}`),
-          angleFields(s.angle),
+          s.angle,
+          {
+            defaultNote: "OpenMC's default: isotropic (every direction equally likely).",
+            addLabel: "Set the angular distribution",
+            addTitle: "Give the particles a direction (a beam) or another angular distribution",
+            add: (ss) => (ss.angle = defaultAngle("monodirectional")),
+            remove: (ss) => (ss.angle = null),
+          },
+          () => [
+            field("Type", sel("angle.type", s.angle.type === "raw" ? [["raw", s.angle.label], ...angleTypes] : angleTypes, s.angle.type), `Directions particles fly off in. ${ANGLE_TIPS[s.angle.type] ?? ""}`),
+            angleFields(s.angle),
+          ],
         ),
-        section(
+        optional(
           "Energy",
-          distEditor("Spectrum", "energy", s.energy, { unit: "eV", tip: "Energy of the emitted particles, in eV (1 MeV = 1e6 eV)" }),
-          h("div", { class: "props-actions preset-row" }, ENERGY_PRESETS.map(([label, make, tip]) => h("button", { class: "tb", title: tip, onclick: () => edit((ss) => (ss.energy = make())) }, label))),
+          s.energy,
+          {
+            defaultNote: "OpenMC's default: Watt spectrum of thermal U-235 fission neutrons (a = 0.988 MeV, b = 2.249 /MeV).",
+            addLabel: "Set the energy spectrum",
+            addTitle: "Choose the energy distribution of the emitted particles",
+            add: (ss) => (ss.energy = WATT_DEFAULT()),
+            remove: (ss) => (ss.energy = null),
+            // Presets are one click away whether or not a spectrum is set.
+            extra: h("div", { class: "props-actions preset-row" }, ENERGY_PRESETS.map(([label, make, tip]) => h("button", { class: "tb", title: tip, onclick: () => edit((ss) => (ss.energy = make())) }, label))),
+          },
+          () => [distEditor("Spectrum", "energy", s.energy, { unit: "eV", tip: "Energy of the emitted particles, in eV (1 MeV = 1e6 eV)" })],
         ),
-        section(
+        optional(
           "Time",
-          field("Distribution", h("input", { type: "checkbox", checked: Boolean(s.time), dataset: { path: "time.enabled" }, style: "justify-self:start" }), "Off: every particle is born at t = 0"),
-          s.time && distEditor("Time", "time", s.time, { unit: "s", types: ["uniform", "discrete", "tabular", "normal", "powerlaw"], tip: "Birth time of the particles, in seconds (for time-dependent tallies and time cutoffs)" }),
+          s.time,
+          {
+            defaultNote: "OpenMC's default: every particle is born at t = 0.",
+            addLabel: "Set the time distribution",
+            addTitle: "Spread the birth times (for time-dependent tallies and time cutoffs)",
+            add: (ss) => (ss.time = { type: "uniform", a: 0, b: 1e-6 }),
+            remove: (ss) => (ss.time = null),
+          },
+          () => [distEditor("Time", "time", s.time, { unit: "s", types: ["uniform", "discrete", "tabular", "normal", "powerlaw"], tip: "Birth time of the particles, in seconds" })],
         ),
         h(
           "details",

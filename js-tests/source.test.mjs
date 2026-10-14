@@ -12,16 +12,20 @@ const xmlOf = (el) => serializeXML(el).replace(/>\s+</g, "><").trim();
 const roundTrip = (src) => sourceFromXML(parseXML(xmlOf(sourceToXML(src)))[0], src.id);
 const strip = ({ name: _n, ...rest }) => rest;
 
-test("a new source is valid and uses OpenMC's defaults", () => {
+test("a new source is a point with OpenMC's defaults left unset", () => {
   const s = newSource(1);
   assert.deepEqual(validateSource(s).errors, []);
   assert.equal(s.particle, "neutron");
-  assert.deepEqual(s.energy, { type: "watt", a: 0.988e6, b: 2.249e-6 });
+  assert.equal(s.angle, null, "isotropic by default");
+  assert.equal(s.energy, null, "Watt spectrum by default");
+  assert.equal(s.time, null);
   const xml = xmlOf(sourceToXML(s));
-  assert.match(xml, /<source type="independent" strength="1" particle="neutron">/);
-  assert.match(xml, /<space type="point"><parameters>0 0 0<\/parameters><\/space>/);
-  assert.match(xml, /<angle type="isotropic"\/>/);
-  assert.match(xml, /<energy type="watt" parameters="988000 0.000002249"\/>/);
+  assert.equal(xml, '<source type="independent" strength="1" particle="neutron"><space type="point"><parameters>0 0 0</parameters></space></source>');
+  // Unset parts stay unset through XML; set ones are written.
+  assert.deepEqual(strip(roundTrip(s)), strip(s));
+  s.energy = { type: "discrete", x: [14.1e6], p: [1] };
+  s.angle = { type: "monodirectional", uvw: [0, 0, 1] };
+  assert.match(xmlOf(sourceToXML(s)), /<angle type="monodirectional" reference_uvw="0 0 1"\/><energy type="discrete"><parameters>14100000 1<\/parameters><\/energy>/);
 });
 
 test("every space, angle and distribution type round-trips through XML", () => {
