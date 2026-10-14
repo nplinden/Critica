@@ -478,16 +478,45 @@ export class Scene {
   }
 
   /** Deep-copies a node with fresh ids (and no OpenMC id) right after the original. */
+  /**
+   * Copies a node and its subtree next to it. The copy is independent: its
+   * half-spaces get their own copies of their surfaces (half-spaces sharing a
+   * surface inside the copy share the new one), and references to nodes inside
+   * the copied subtree point to the copies. References to nodes elsewhere keep
+   * their target.
+   */
   duplicate(id) {
     const hit = this.find(id);
     if (!hit) return null;
     const copy = clone(hit.node);
+    const nodeIds = new Map(); // old node id → new
     const renumber = (n) => {
+      const old = n.id;
       n.id = this.nextId++;
+      nodeIds.set(old, n.id);
       if (n.openmc) delete n.openmc.id;
       n.children?.forEach(renumber);
     };
     renumber(copy);
+    const surfaceIds = new Map(); // old surface id → private copy
+    this.walk((n) => {
+      if (n.kind === "halfspace" && this.surfaces.has(n.params.surface)) {
+        const old = n.params.surface;
+        if (!surfaceIds.has(old)) {
+          const { id: _, periodic: __, ...rest } = this.surfaces.get(old);
+          surfaceIds.set(old, this.addSurface(clone(rest)));
+        }
+        n.params.surface = surfaceIds.get(old);
+        n.name = n.name.replace(new RegExp(`^([−+])${old}(?= )`), `$1${n.params.surface}`);
+      } else if (n.kind === "ref" && nodeIds.has(n.params.target)) {
+        n.params.target = nodeIds.get(n.params.target);
+      }
+    }, [copy]);
+    // Periodic partners copied together stay paired.
+    for (const [old, fresh] of surfaceIds) {
+      const partner = this.surfaces.get(old).periodic;
+      if (partner !== undefined && surfaceIds.has(partner)) this.surfaces.get(fresh).periodic = surfaceIds.get(partner);
+    }
     copy.name = `${hit.node.name} copy`;
     hit.list.splice(hit.index + 1, 0, copy);
     return copy;

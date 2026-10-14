@@ -85,7 +85,10 @@ npm run demo    # builder at http://localhost:1948/
   *cut*, and leaf icons use the same color as the faces they produce.
   Ctrl-click selects several nodes; the numbers show selection order, and the
   first selected becomes the Subtract base. Drag rows to reorder or reparent
-  them. The ● toggle excludes a node from its parent without deleting it; a
+  them. *Duplicate* (<kbd>Ctrl+D</kbd>) makes an independent copy: copied
+  half-spaces get their own surfaces, so editing the copy leaves the original
+  alone (use *Reference* to keep them linked). The ● toggle excludes a node
+  from its parent without deleting it; a
   disabled top-level shape is just hidden, and references (↪) to a disabled
   node still use it.
 - **Surfaces**: the *Surfaces* section under the tree lists every surface of

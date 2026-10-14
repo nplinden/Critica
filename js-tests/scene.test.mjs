@@ -300,3 +300,24 @@ test("a disabled source is hidden but its references still use it", async () => 
   assert.equal((xml.match(/<cell /g) ?? []).length, 2, "but does not write the rod as a cell");
   ev.dispose();
 });
+
+test("a duplicated half-space region gets its own surfaces", () => {
+  const s = new Scene();
+  const box = s.add("intersect");
+  const a = s.addHalfspace("x-plane", [1], "-", box.id);
+  s.add("halfspace", { params: { surface: a.params.surface, sense: "+" }, name: "+1 x-plane" }, box.id); // same surface twice
+  const outside = s.add("sphere");
+  s.add("ref", { params: { target: a.id } }, box.id); // internal reference
+  s.add("ref", { params: { target: outside.id } }, box.id); // external reference
+  const copy = s.duplicate(box.id);
+  const [h1, h2, r1, r2] = copy.children;
+  assert.notEqual(h1.params.surface, a.params.surface, "private surface");
+  assert.equal(h1.params.surface, h2.params.surface, "shared inside the copy");
+  assert.equal(s.surfaces.size, 2);
+  assert.equal(h1.name, `−${h1.params.surface} x-plane`);
+  assert.equal(r1.params.target, h1.id, "internal reference follows the copy");
+  assert.equal(r2.params.target, outside.id, "external reference keeps its target");
+  // Editing the copy leaves the original alone.
+  s.surfaces.get(h1.params.surface).coeffs[0] = 5;
+  assert.equal(s.surfaces.get(a.params.surface).coeffs[0], 1);
+});
