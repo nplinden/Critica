@@ -9,6 +9,7 @@
 //   viewer.setUp("z");              // which model axis points up on screen ("y" default)
 //   viewer.setTheme("light");       // background and grid colors: "dark" (default) or "light"
 //   viewer.setGrid(false);          // hide the grid plane (the axis lines stay)
+//   viewer.setAxes(false);          // hide the X/Y/Z axis lines
 //   viewer.setGizmos({ planes, arrows, surfaces });  // plane sheets, 3D arrows and translucent
 //       surface shells (model coordinates): planes: [{ polygon: [[x,y,z]…], normal, color, tag }],
 //       arrows: [{ from, dir, length, color, tag }], surfaces: [{ positions, normals, indices, color, tag }],
@@ -206,6 +207,7 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
   let lineCount = 0;
   const AXIS_VERTICES = 6; // the grid buffer starts with the three axis lines
   let showGrid = grid;
+  let showAxes = true;
 
   let center = [0, 0, 0];
   let radius = 2;
@@ -240,12 +242,13 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
     const depthAxis = zUp ? GREEN : BLUE; // the horizontal line running into the screen
     const upAxis = zUp ? BLUE : GREEN; // the vertical stub
     const e = n * step;
-    // Axis lines first, so they can be drawn without the grid plane.
+    // Axis lines first, so either part can be drawn alone. The grid keeps its
+    // own centre lines for when the axes are hidden; drawn after the axes,
+    // they lose the depth test where both show.
     line([0, 0, -e], [0, 0, e], depthAxis);
     line([-e, 0, 0], [e, 0, 0], RED);
     line([0, 0, 0], [0, step * 2, 0], upAxis);
     for (let i = -n; i <= n; i++) {
-      if (i === 0) continue;
       const v = i * step;
       line([v, 0, -e], [v, 0, e], minor);
       line([-e, 0, v], [e, 0, v], minor);
@@ -356,7 +359,8 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
       gl.uniformMatrix4fv(u.uModel, false, MODEL_IDENTITY);
       gl.uniform1i(u.uMode, 3);
       gl.bindVertexArray(lines.vao);
-      gl.drawArrays(gl.LINES, 0, showGrid ? lineCount : AXIS_VERTICES);
+      if (showAxes) gl.drawArrays(gl.LINES, 0, AXIS_VERTICES);
+      if (showGrid) gl.drawArrays(gl.LINES, AXIS_VERTICES, lineCount - AXIS_VERTICES);
     }
     drawScene(0);
     drawGizmos(0);
@@ -697,6 +701,11 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
       }
       gizmoWires.upload({ aPos: new Float32Array(wire.pos), aColor: new Float32Array(wire.col) });
       gizmoWireCount = wire.pos.length / 3;
+      redraw();
+    },
+    /** Shows or hides the X/Y/Z axis lines. */
+    setAxes(on) {
+      showAxes = Boolean(on);
       redraw();
     },
     /** Shows or hides the grid plane; the axis lines stay. */
