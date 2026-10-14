@@ -78,7 +78,7 @@ npm run demo    # builder at http://localhost:1948/
   New, From library, Duplicate and Delete. When one operation, cell or universe is selected,
   new nodes go inside it.
 - **Top bar**: a *File* menu (New, Open… <kbd>Ctrl+O</kbd>, Save
-  <kbd>Ctrl+S</kbd>, Export as → OpenMC XML…), *Settings* (light/dark theme or follow the OS, viewport statistics,
+  <kbd>Ctrl+S</kbd>, Export as → OpenMC XML…), *Preferences* (light/dark theme or follow the OS, viewport statistics,
   world box, curved-surface tessellation, up axis), and *Help* (Tutorial…, Keyboard shortcuts…
   <kbd>?</kbd>).
 - **Scene tree**: shows the CSG tree. Subtract children are badged *base* or
@@ -179,7 +179,7 @@ recomputes that node and its ancestors, and undo is instant.
   edges. They export as the primitive surfaces OpenMC would generate, and
   *Expand to half-spaces* turns one into editable half-spaces.
 - Infinite half-spaces are drawn inside a world box, auto-fitted to the
-  bounded content (or set manually in *Settings*). Faces that only exist
+  bounded content (or set manually in *Preferences*). Faces that only exist
   because the world box cuts an unbounded region (the four sides of a slab
   between two planes, the ends of an infinite cylinder) are drawn faded with
   diagonal stripes: the region goes on past them. A plane half-space shown on
@@ -244,6 +244,33 @@ highlighted); *View → Sources* draws them in the Geometry tab too.
   File, compiled, mesh and tokamak sources, and distributions Critica does
   not edit (mixtures, decay spectra, biased sampling, mesh and point-cloud
   spaces), are kept verbatim.
+
+### Simulation settings
+
+The **Settings** tab edits the rest of OpenMC's `<settings>`, grouped in cards:
+
+- **Run**: run mode, particles, batches, inactive batches and generations per
+  batch (eigenvalue), seed, energy mode (and max scattering order in
+  multi-group).
+- **Convergence**: the k-eff trigger (type and threshold) and tally triggers
+  (on, max batches, check interval).
+- **Physics**: photon transport and electron treatment, survival biasing,
+  fission and delayed neutrons, weight cutoff and survivor weight, neutron and
+  photon energy cutoffs, neutron time cutoff.
+- **Temperature**: default, method, tolerance, multipole and range.
+- **Output**: `summary.h5` and `tallies.out`, output path, state point and
+  source point batches and options, verbosity, lost-particle limits.
+
+The ribbon sets the run mode (*Eigenvalue*, *Fixed source*, *Others ▾*:
+volume, plot, particle restart), *Reset*s to the defaults of a new scene
+(eigenvalue, 1000 particles, 100 batches, 10 inactive), and previews
+`settings.xml`. Empty fields mean OpenMC's default and write nothing; fields
+that do not apply to the run mode are hidden and not written. A summary
+validates the settings (missing particles or batches, inactive ≥ batches, a
+trigger without threshold, a fixed source run without sources, …) and shows
+the `settings.xml` that would be exported. Settings of an opened file that the
+tab does not list (meshes, weight windows, entropy, …) are kept and written
+back. The top bar's former *Settings* button is now *Preferences*.
 
 See [docs/openmc.md](docs/openmc.md) for the mapping, the conventions checked
 against OpenMC's source, and the extension points planned for lattices.

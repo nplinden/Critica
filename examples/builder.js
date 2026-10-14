@@ -26,6 +26,8 @@ import { transformSurface, toForm, transformForm, isPlane, evaluate as evaluateS
 import { fromTransform, multiply, IDENTITY, invert, transformPoint } from "./mat4.js";
 import { createMaterialsWorkspace } from "./materials-ui.js";
 import { createSourcesWorkspace } from "./sources-ui.js";
+import { createSettingsWorkspace } from "./settings-ui.js";
+import { defaultSettings } from "./settings/settings.js";
 import { sourceShape } from "./source/source.js";
 import { COMPOSITE_TYPES } from "./openmc/composite.js";
 
@@ -56,6 +58,8 @@ const ICONS = {
   isolate: '<circle cx="8" cy="8" r="2.6" fill="currentColor" fill-opacity=".45"/><circle cx="8" cy="8" r="6" stroke-dasharray="1.4 1.6"/>',
   xray: '<path d="M8 1.5 14 5v6l-6 3.5L2 11V5z M2 5l6 3.5L14 5 M8 8.5v6" stroke-dasharray="1.4 1.3"/>',
   add: '<path d="M8 3v10M3 8h10"/>',
+  keff: '<path d="M8 13.5c-3 0-5-2-5-4.5C3 6 6 4.5 8 1.5c2 3 5 4.5 5 7.5 0 2.5-2 4.5-5 4.5z"/><path d="M8 11c-1.2 0-2-.8-2-1.9C6 7.8 7.2 7 8 5.6c.8 1.4 2 2.2 2 3.5 0 1.1-.8 1.9-2 1.9z" fill="currentColor" fill-opacity=".4"/>',
+  reset: '<path d="M3 8a5 5 0 1 0 1.5-3.5M3 2.5v2.5h2.5"/>',
   srcpoint: '<circle cx="8" cy="8" r="2" fill="currentColor" fill-opacity=".5"/><path d="M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3M3.4 3.4l2.1 2.1M10.5 10.5l2.1 2.1M3.4 12.6l2.1-2.1M10.5 5.5l2.1-2.1"/>',
   sources: '<circle cx="8" cy="8" r="1.6" fill="currentColor"/><circle cx="8" cy="8" r="4" stroke-dasharray="1.5 1.5"/><circle cx="8" cy="8" r="6.5" stroke-opacity=".5" stroke-dasharray="1.5 2"/>',
   axes: '<path d="M3 13V3M3 13h10M3 13l6-4" /><path d="M3 3 2 4.5M3 3l1 1.5M13 13l-1.5-1M13 13l-1.5 1"/>',
@@ -330,6 +334,7 @@ function refresh({ props = true, fit = false } = {}) {
   updateToolbar();
   if (activeTab === "materials") materialsUI.render();
   if (activeTab === "sources") sourcesUI.render();
+  if (activeTab === "settings") settingsUI.render();
 }
 
 function meshOf(solid) {
@@ -2575,6 +2580,7 @@ async function openFile(file) {
     if (imported) {
       scene.sources = imported.sources;
       scene.openmc.settings = imported.settings;
+      scene.settings = imported.values;
       commit();
       setTab("sources");
       refresh({ props: false });
@@ -2875,6 +2881,37 @@ $("ribbon-src-openmc").append(
   }),
 );
 
+// Settings ribbon: run mode, reset, preview.
+const modeButton = (label, iconName, mode, title) => {
+  const b = sourceButton(label, iconName, title, () => run(() => settingsUI.setRunMode(mode)));
+  b.dataset.runMode = mode;
+  return b;
+};
+$("ribbon-set-mode").append(
+  modeButton("Eigenvalue", "keff", "eigenvalue", "Criticality (k-eff) calculation"),
+  modeButton("Fixed source", "srcpoint", "fixed source", "Fixed source calculation from the sources of the Source tab"),
+  flyoutButton({
+    id: "run-mode-others",
+    iconName: "more",
+    label: "Others",
+    title: "Other run modes",
+    items: [
+      { label: "Volume", title: "Stochastic volume calculation (needs <volume_calc>)", run: () => settingsUI.setRunMode("volume") },
+      { label: "Plot", title: "Geometry plots (needs plots.xml)", run: () => settingsUI.setRunMode("plot") },
+      { label: "Particle restart", title: "Replay a lost particle", run: () => settingsUI.setRunMode("particle restart") },
+    ],
+  }),
+);
+$("ribbon-set-edit").append(
+  sourceButton("Reset", "reset", "Back to the settings of a new scene: eigenvalue, 1000 particles, 100 batches, 10 inactive", () => run(() => settingsUI.resetDefaults(defaultSettings().values))),
+);
+$("ribbon-set-openmc").append(
+  sourceButton("Preview XML", "xml", "Show the settings.xml that File → Export as would write", () => {
+    previewKind = "settings";
+    openDialog("xml-preview");
+  }),
+);
+
 // The ribbon can be collapsed to give the canvas more room; remembered.
 const RIBBON_KEY = "critica.builder.ribbon";
 function setRibbon(open) {
@@ -2898,7 +2935,7 @@ try {
 setRibbon(ribbonOpen);
 $("ribbon-toggle").onclick = () => setRibbon($("ribbon").classList.contains("collapsed"));
 // Double-clicking the active tab also collapses or expands it, as in office suites.
-for (const t of ["geometry", "materials", "sources"]) $(`tab-${t}`).addEventListener("dblclick", () => setRibbon($("ribbon").classList.contains("collapsed")));
+for (const t of ["geometry", "materials", "sources", "settings"]) $(`tab-${t}`).addEventListener("dblclick", () => setRibbon($("ribbon").classList.contains("collapsed")));
 
 // ---- Menus (File, Help) ----
 // Desktop-style dropdowns: click to open, hover entries with ▸ to open their
@@ -3021,18 +3058,27 @@ const sourcesUI = createSourcesWorkspace({
   },
 });
 
+const settingsUI = createSettingsWorkspace({
+  scene: () => scene,
+  commit,
+  changed: () => schedule(),
+  settingsXML: () => exportSettingsXML(scene),
+  setMessage,
+});
+
 function setTab(tab) {
   activeTab = tab;
   // The Source workspace shows the geometry viewport too: move it there and back.
   if (tab === "sources") $("src-view-slot").append($("view"));
   else if (tab === "geometry") $("ws-geometry").insertBefore($("view"), $("props"));
-  for (const t of ["geometry", "materials", "sources"]) {
+  for (const t of ["geometry", "materials", "sources", "settings"]) {
     $(`ws-${t}`).hidden = t !== tab;
     $(`ribbon-${t}`).hidden = t !== tab;
     $(`tab-${t}`).classList.toggle("on", t === tab);
     $(`tab-${t}`).setAttribute("aria-selected", String(t === tab));
   }
   if (tab === "materials") materialsUI.render();
+  else if (tab === "settings") settingsUI.render();
   else {
     if (tab === "sources") sourcesUI.render();
     renderViewport(); // sources are always drawn in the Source workspace
@@ -3047,6 +3093,7 @@ function setTab(tab) {
 $("tab-geometry").onclick = () => setTab("geometry");
 $("tab-materials").onclick = () => setTab("materials");
 $("tab-sources").onclick = () => setTab("sources");
+$("tab-settings").onclick = () => setTab("settings");
 $("open").onclick = () => $("file").click();
 $("file").onchange = async (e) => {
   const file = e.target.files[0];
@@ -3407,6 +3454,7 @@ function renderTutorial() {
       h("li", {}, b("Cell"), " (above the scene tree) wraps a shape into a cell; give it a material id, ", k("void"), ", or fill it with a universe."),
       h("li", {}, b("Universe"), " adds a universe that cells can be filled with; set the fill translation and rotation on the cell."),
       h("li", {}, "Void cells are hidden in the viewport; toggle ", b("Void"), " to show them. ", b("Materials"), " (", k("M"), ") colors cells by material and shows a legend."),
+      h("li", {}, "The ", b("Settings"), " tab sets the run: eigenvalue or fixed source, particles, batches, triggers, physics, temperature and output files."),
       h("li", {}, "The ", b("Source"), " tab defines the external source: a point, box, sphere or cylinder with its particle, energy spectrum (eV), direction and constraints, drawn in the viewport. It is written into the settings of model.xml or settings.xml."),
     ),
     h("h3", {}, "4 · Look around"),
@@ -3415,7 +3463,7 @@ function renderTutorial() {
       {},
       h("li", {}, "Drag to orbit, right-drag to pan, scroll to zoom; ", b("Fit"), " frames everything."),
       h("li", {}, "Click a face to select its region (the top-level item or cell); click again to step down toward the shape that made the face, or ", k("Alt"), "-click to jump to it. Selected parts that are hidden (like a subtracted cutter) appear as an ", b("x-ray"), " ghost."),
-      h("li", {}, b("Isolate"), " shows only the selection. ", b("Settings"), " holds the world box, curve smoothness and up axis."),
+      h("li", {}, b("Isolate"), " shows only the selection. ", b("Preferences"), " holds the world box, curve smoothness and up axis."),
       h("li", {}, b("Cutaway"), " (", k("K"), ") slices the view with a section plane or removes a quarter or an eighth, so you can see and click the cells inside."),
     ),
     h("h3", {}, "5 · Materials"),
@@ -3443,7 +3491,7 @@ commit();
 refresh({ fit: true });
 try {
   const savedTab = localStorage.getItem(TAB_KEY) ?? localStorage.getItem("geomium.builder.tab");
-  if (savedTab === "materials" || savedTab === "sources") setTab(savedTab);
+  if (["materials", "sources", "settings"].includes(savedTab)) setTab(savedTab);
 } catch {
   // Storage unavailable: start on Geometry.
 }

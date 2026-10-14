@@ -25,11 +25,13 @@
 //   openmc      round-trip data: root universe id, preserved XML elements
 //   sources     external source distributions (examples/source/source.js), written
 //               into the <settings> of model.xml / settings.xml
+//   settings    simulation settings { values } (examples/settings/settings.js)
 //
 // Polygon tags are node ids: every face maps back to the node (primitive, half-
 // space, or cell) that produced it, for colouring and viewport picking.
 
 import { newSource } from "./source/source.js";
+import { defaultSettings, readSettings } from "./settings/settings.js";
 import { SURFACE_TYPES, classifyQuadric, halfspaceBounds, infiniteBox, isPlane, axisOf } from "./openmc/surfaces.js";
 import { intersectBoxes, unionBoxes, emptyBox, regionBounds as astBounds, linearConstraint, refineByPlanes } from "./openmc/region.js";
 import { COMPOSITE_TYPES, defaultCompositeParams, expandComposite } from "./openmc/composite.js";
@@ -95,6 +97,7 @@ export class Scene {
     this.materials = {};
     this.openmc = {};
     this.sources = [];
+    this.settings = defaultSettings();
     this.nextId = 1;
   }
 
@@ -715,6 +718,7 @@ export class Scene {
       materials: this.materials,
       openmc: this.openmc,
       sources: this.sources,
+      settings: this.settings,
     };
   }
 
@@ -727,6 +731,9 @@ export class Scene {
     scene.materials = Object.fromEntries(Object.entries(data.materials ?? {}).map(([id, m]) => [id, normalizeMaterial(id, m)]));
     scene.openmc = clone(data.openmc ?? {});
     scene.sources = clone(data.sources ?? []);
+    // Scenes saved before the Settings tab: read the settings an opened file kept.
+    const keptSettings = (scene.openmc.model?.sections ?? []).find((s) => s?.name === "settings") ?? scene.openmc.settings;
+    scene.settings = data.settings ? clone(data.settings) : keptSettings ? readSettings(keptSettings) : defaultSettings();
     let maxId = 0;
     scene.walk((n) => {
       maxId = Math.max(maxId, n.id);

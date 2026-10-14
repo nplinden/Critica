@@ -10,6 +10,7 @@
 // must not overlap; imported cells are assumed not to overlap each other).
 
 import { settingsWithSources } from "../source/source.js";
+import { applySettings, validateSettings } from "../settings/settings.js";
 import { element, xmlDocument, getText } from "./xml.js";
 import { formatRegion } from "./region.js";
 import { toForm, fromForm, transformForm, clean } from "./surfaces.js";
@@ -373,10 +374,11 @@ export function exportOpenMC(scene, { worldBoundary = "auto" } = {}) {
 function settingsFor(scene) {
   const base = (scene.openmc.model?.sections ?? []).find((s) => s?.name === "settings") ?? scene.openmc.settings ?? null;
   const sources = scene.sources ?? [];
-  if (!base && !sources.length) return { element: null, warnings: ["model.xml has no <settings> section; add one before running OpenMC."] };
-  const warnings = [];
-  if (!base) warnings.push("The settings only hold the sources: add a run mode, particles and batches before running OpenMC.");
-  return { element: settingsWithSources(base, sources, warnings), warnings };
+  const values = scene.settings?.values ?? {};
+  if (!base && !sources.length && !Object.keys(values).length) return { element: null, warnings: ["model.xml has no <settings> section; set the run in the Settings tab before running OpenMC."] };
+  const { errors, warnings } = validateSettings(values, { sources: sources.length });
+  const all = [...errors.map((e) => `Settings: ${e}.`), ...warnings.map((w) => `Settings: ${w}.`)];
+  return { element: settingsWithSources(applySettings(base, values), sources, all), warnings: all };
 }
 
 /** settings.xml: the kept settings with the scene's sources (throws when there is nothing to write). */

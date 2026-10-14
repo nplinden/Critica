@@ -115,11 +115,12 @@ test("model.xml sources become editable and are exported again", () => {
 
 test("settings.xml import and export", () => {
   const s = new Scene();
+  s.settings.values = {};
   assert.throws(() => exportSettingsXML(s), /no settings or sources/);
   s.addSource("spherical", { size: 3 });
   const only = exportSettingsXML(s);
   assert.match(only.text, /<settings>\s*<source type="independent"/);
-  assert.match(only.warnings.join(), /run mode/);
+  assert.match(only.warnings.join(), /need a number of particles/);
   const imported = importSettingsXML('<settings><batches>7</batches><source><space type="point"><parameters>1 0 0</parameters></space></source></settings>');
   assert.equal(imported.sources.length, 1);
   assert.deepEqual(imported.settings.children.map((c) => c.name), ["batches"]);

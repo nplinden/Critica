@@ -178,6 +178,18 @@
   .preset-row { flex-wrap: wrap; }
   .preset-row .tb { font-size: 11.5px; padding: 2px 7px; }
 
+  /* ---- settings workspace ---- */
+  .settings-main { grid-template-columns: minmax(0, 1fr) 380px; }
+  #settings-form { overflow-y: auto; padding-bottom: 24px; }
+  .settings-intro { margin: 0 12px 4px; max-width: 760px; }
+  /* Columns, not a grid: cards of different heights pack without gaps. */
+  .settings-grid { columns: 330px; column-gap: 12px; padding: 8px 12px; }
+  .settings-card { break-inside: avoid; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 8px; padding: 2px 12px 10px; background: var(--panel); }
+  .settings-card h3 { font-size: 11px; font-weight: 500; color: var(--muted); margin: 10px 0 6px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .settings-card .field { grid-template-columns: 120px 1fr; }
+  #settings-summary { border-left: 1px solid var(--line); overflow-y: auto; }
+  .settings-xml { max-height: none; }
+
   /* ---- materials workspace ---- */
   .materials-main { display: grid; grid-template-columns: 280px minmax(420px, 1fr) 360px; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
   .mat-status { grid-column: 1 / -1; min-height: 24px; padding: 4px 12px; border-top: 1px solid var(--line); background: var(--panel); color: var(--muted); font-size: 12px; }
@@ -335,7 +347,7 @@
         </div>
       </div>
     </div>
-    <button class="tb" id="settings-open" title="Scene settings: world box, tessellation, up axis">Settings</button>
+    <button class="tb" id="settings-open" title="Preferences: theme, world box, tessellation, up axis">Preferences</button>
     <div class="menu">
       <button class="tb menu-button" id="help-menu-button" aria-haspopup="menu" aria-expanded="false" aria-controls="help-menu">Help</button>
       <div class="menu-list" id="help-menu" role="menu" hidden>
@@ -348,6 +360,7 @@
     <button class="tab on" role="tab" id="tab-geometry" aria-selected="true" aria-controls="ribbon-geometry">Geometry</button>
     <button class="tab" role="tab" id="tab-materials" aria-selected="false" aria-controls="ribbon-materials">Materials</button>
     <button class="tab" role="tab" id="tab-sources" aria-selected="false" aria-controls="ribbon-sources">Source</button>
+    <button class="tab" role="tab" id="tab-settings" aria-selected="false" aria-controls="ribbon-settings">Settings</button>
   </div>
   <span class="spacer"></span>
   <button class="tb ribbon-toggle" id="ribbon-toggle" title="Collapse the ribbon" aria-expanded="true">▴</button>
@@ -385,6 +398,11 @@
     <div class="rgroup"><div class="rgroup-body big" id="ribbon-src-edit"></div><div class="rgroup-label">Source</div></div>
     <div class="rgroup"><div class="rgroup-body big" id="ribbon-src-openmc"></div><div class="rgroup-label">OpenMC</div></div>
   </div>
+  <div class="ribbon-panel" id="ribbon-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+    <div class="rgroup"><div class="rgroup-body big" id="ribbon-set-mode"></div><div class="rgroup-label">Run mode</div></div>
+    <div class="rgroup"><div class="rgroup-body big" id="ribbon-set-edit"></div><div class="rgroup-label">Settings</div></div>
+    <div class="rgroup"><div class="rgroup-body big" id="ribbon-set-openmc"></div><div class="rgroup-label">OpenMC</div></div>
+  </div>
   <div class="ribbon-panel" id="ribbon-materials" role="tabpanel" aria-labelledby="tab-materials" hidden>
     <div class="rgroup"><div class="rgroup-body big" id="ribbon-mat-library"></div><div class="rgroup-label">Library</div></div>
     <div class="rgroup"><div class="rgroup-body big" id="ribbon-mat-edit"></div><div class="rgroup-label">Material</div></div>
@@ -413,7 +431,7 @@
 </dialog>
 <dialog class="modal" id="settings" aria-labelledby="settings-title">
   <div class="dialog-head">
-    <h2 id="settings-title">Scene settings</h2>
+    <h2 id="settings-title">Preferences</h2>
     <button class="tb dialog-close" title="Close (Esc)" aria-label="Close">✕</button>
   </div>
   <div id="settings-body"></div>
@@ -441,6 +459,10 @@
     <div id="src-editor"></div>
     <div class="section" id="src-summary"></div>
   </aside>
+</main>
+<main id="ws-settings" class="settings-main" role="tabpanel" aria-labelledby="tab-settings" hidden>
+  <section class="panel" id="settings-form"></section>
+  <aside class="panel" id="settings-summary"></aside>
 </main>
 <main id="ws-materials" class="materials-main" role="tabpanel" aria-labelledby="tab-materials" hidden>
   <section class="panel" id="mat-list-panel">

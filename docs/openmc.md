@@ -133,6 +133,19 @@ type, checks validation, settings merging and model/settings import-export,
 and round-trips the 614 sources of the ICSBEP `settings.xml` files and the
 OpenMC regression inputs.
 
+## Settings
+
+`examples/settings/settings.js` lists the settings the Settings tab edits
+(`SETTINGS_FIELDS`: element, type, OpenMC default, run modes it applies to).
+Values are stored as `scene.settings.values` keyed by element name, or
+`element.child` for compound elements (`cutoff`, `output`, `keff_trigger`,
+`trigger`, `state_point`, `source_point`), which are written with child
+elements as the Python API does. Only set values are written. On export the
+opened file's `<settings>` is the base: the modelled elements are replaced,
+unmodelled elements and unmodelled children of compound elements are kept,
+and the sources are appended. `js-tests/settings.test.mjs` round-trips every
+field and the 394 ICSBEP `settings.xml` files.
+
 ## Conventions (checked against the OpenMC source)
 
 - **Half-space membership** (`openmc.Halfspace.__contains__`): a point

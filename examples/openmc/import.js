@@ -13,6 +13,7 @@ import { parseRegion, formatRegion } from "./region.js";
 import { validateSurface } from "./surfaces.js";
 import { rotationToOpenMCAngles } from "../mat4.js";
 import { sourceFromXML } from "../source/source.js";
+import { readSettings } from "../settings/settings.js";
 import { materialFromXML, normalizeMaterial } from "../materials/material.js";
 
 const BOUNDARY_ALIASES = { transmit: "transmission", reflect: "reflective", reflecting: "reflective", "": "transmission" };
@@ -51,7 +52,7 @@ export function importSettingsXML(text) {
   if (!el) return null;
   const warnings = [];
   const sources = readSources(el, warnings);
-  return { sources, settings: { ...el, children: el.children.filter((c) => c.name !== "source") }, warnings };
+  return { sources, settings: { ...el, children: el.children.filter((c) => c.name !== "source") }, values: readSettings(el), warnings };
 }
 
 /** Reads a <materials> element into a library keyed by id. */
@@ -160,7 +161,10 @@ export function importOpenMC(text, { fileName } = {}) {
   // External sources become editable; the rest of <settings> is kept as is
   // and gets the scene's sources back on export.
   const settingsEl = model ? children(model, "settings")[0] : roots.find((r) => r.name === "settings");
-  if (settingsEl) scene.sources = readSources(settingsEl, warnings);
+  if (settingsEl) {
+    scene.sources = readSources(settingsEl, warnings);
+    scene.settings = readSettings(settingsEl);
+  }
   const stripSources = (c) => (c.name === "settings" ? { ...c, children: c.children.filter((k) => k.name !== "source") } : c);
   scene.openmc = {
     ...scene.openmc,
