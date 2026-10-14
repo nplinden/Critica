@@ -71,7 +71,7 @@ npm run demo    # builder at http://localhost:1948/
   *Shapes* adds finite regions: *Cube*, *Sphere*, *Cylinder*, and *Others ▾*
   for a cone and OpenMC's composite surfaces; *Combine* has Union, Subtract, Intersect, Complement,
   Ungroup, Duplicate and Reference; *View* has Cutaway, the By material, Void,
-  World box, Isolate and X-ray toggles, and Fit; *OpenMC → Preview XML* opens
+  World box, Isolate, X-ray and Grid (the grid plane; <kbd>G</kbd>) toggles, and Fit; *OpenMC → Preview XML* opens
   the geometry.xml, materials.xml or model.xml that *Export as* would write
   (with its warnings), to copy or download. The *Materials* ribbon has
   New, From library, Duplicate and Delete. When one operation, cell or universe is selected,

@@ -8,6 +8,7 @@
 //   viewer.fit(bounds);
 //   viewer.setUp("z");              // which model axis points up on screen ("y" default)
 //   viewer.setTheme("light");       // background and grid colors: "dark" (default) or "light"
+//   viewer.setGrid(false);          // hide the grid plane (the axis lines stay)
 //   viewer.setGizmos({ planes, arrows, surfaces });  // plane sheets, 3D arrows and translucent
 //       surface shells (model coordinates): planes: [{ polygon: [[x,y,z]…], normal, color, tag }],
 //       arrows: [{ from, dir, length, color, tag }], surfaces: [{ positions, normals, indices, color, tag }],
@@ -203,6 +204,8 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
   let gizmoWireCount = 0;
   let gizmoLineCount = 0;
   let lineCount = 0;
+  const AXIS_VERTICES = 6; // the grid buffer starts with the three axis lines
+  let showGrid = grid;
 
   let center = [0, 0, 0];
   let radius = 2;
@@ -236,13 +239,17 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
     const zUp = model === MODEL_Z_UP;
     const depthAxis = zUp ? GREEN : BLUE; // the horizontal line running into the screen
     const upAxis = zUp ? BLUE : GREEN; // the vertical stub
-    for (let i = -n; i <= n; i++) {
-      const v = i * step;
-      const e = n * step;
-      line([v, 0, -e], [v, 0, e], i === 0 ? depthAxis : minor);
-      line([-e, 0, v], [e, 0, v], i === 0 ? RED : minor);
-    }
+    const e = n * step;
+    // Axis lines first, so they can be drawn without the grid plane.
+    line([0, 0, -e], [0, 0, e], depthAxis);
+    line([-e, 0, 0], [e, 0, 0], RED);
     line([0, 0, 0], [0, step * 2, 0], upAxis);
+    for (let i = -n; i <= n; i++) {
+      if (i === 0) continue;
+      const v = i * step;
+      line([v, 0, -e], [v, 0, e], minor);
+      line([-e, 0, v], [e, 0, v], minor);
+    }
     lines.upload({ aPos: new Float32Array(pos), aColor: new Float32Array(col) });
     lineCount = pos.length / 3;
   }
@@ -345,11 +352,11 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
     gl.disable(gl.BLEND);
     gl.depthMask(true);
 
-    if (grid && lineCount) {
+    if (lineCount) {
       gl.uniformMatrix4fv(u.uModel, false, MODEL_IDENTITY);
       gl.uniform1i(u.uMode, 3);
       gl.bindVertexArray(lines.vao);
-      gl.drawArrays(gl.LINES, 0, lineCount);
+      gl.drawArrays(gl.LINES, 0, showGrid ? lineCount : AXIS_VERTICES);
     }
     drawScene(0);
     drawGizmos(0);
@@ -690,6 +697,11 @@ export function createViewer(canvas, { onPick, onContext, theme: initialTheme = 
       }
       gizmoWires.upload({ aPos: new Float32Array(wire.pos), aColor: new Float32Array(wire.col) });
       gizmoWireCount = wire.pos.length / 3;
+      redraw();
+    },
+    /** Shows or hides the grid plane; the axis lines stay. */
+    setGrid(on) {
+      showGrid = Boolean(on);
       redraw();
     },
     /** Switches background and grid colors ("dark" or "light"). */

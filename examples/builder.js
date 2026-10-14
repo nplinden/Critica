@@ -54,6 +54,7 @@ const ICONS = {
   isolate: '<circle cx="8" cy="8" r="2.6" fill="currentColor" fill-opacity=".45"/><circle cx="8" cy="8" r="6" stroke-dasharray="1.4 1.6"/>',
   xray: '<path d="M8 1.5 14 5v6l-6 3.5L2 11V5z M2 5l6 3.5L14 5 M8 8.5v6" stroke-dasharray="1.4 1.3"/>',
   add: '<path d="M8 3v10M3 8h10"/>',
+  grid: '<path d="M1.5 10.5 6 5.5h8.5L10 10.5z M3.8 8h8.9 M8.4 5.5 5.7 10.5 M11.3 5.5 8.6 10.5" stroke-opacity=".9"/>',
   xml: '<path d="M5.5 4 2 8l3.5 4M10.5 4 14 8l-3.5 4M9.2 2.5 6.8 13.5"/>',
   more: '<rect x="2" y="2" width="5" height="5" rx="1"/><circle cx="11.5" cy="4.5" r="2.5"/><path d="M4.5 9 7 14H2z"/><path d="M9 11.5h5M11.5 9v5"/>',
   library: '<path d="M2.5 2.5h3v11h-3z M6.5 2.5h3v11h-3z M10.3 3.2l2.8-.8 2.4 10.6-2.8.8z"/>',
@@ -2696,7 +2697,28 @@ $("tree-actions").append(
 // View group: big Cutaway and Fit buttons around the stacked toggles.
 $("cutaway-toggle").append(icon("cutaway"), h("span", { class: "label" }, "Cutaway"));
 $("fit").append(icon("fit"), h("span", { class: "label" }, "Fit"));
-for (const [id, name] of [["color-material", "palette"], ["void", "void"], ["world-box", "worldbox"], ["isolate", "isolate"], ["xray", "xray"]]) $(id).prepend(icon(name));
+for (const [id, name] of [["color-material", "palette"], ["void", "void"], ["world-box", "worldbox"], ["isolate", "isolate"], ["xray", "xray"], ["grid-toggle", "grid"]]) $(id).prepend(icon(name));
+
+// Grid plane toggle (the axis lines always show); remembered per browser.
+const GRID_KEY = "critica.builder.grid";
+let showGrid = true;
+try {
+  showGrid = localStorage.getItem(GRID_KEY) !== "off";
+} catch {
+  // Storage unavailable: shown.
+}
+function setShowGrid(on) {
+  showGrid = on;
+  viewer.setGrid(on);
+  $("grid-toggle").classList.toggle("on", on);
+  try {
+    localStorage.setItem(GRID_KEY, on ? "on" : "off");
+  } catch {
+    // Storage unavailable: the choice lasts for this session.
+  }
+}
+setShowGrid(showGrid);
+$("grid-toggle").onclick = () => setShowGrid(!showGrid);
 
 // Materials ribbon: the library actions of the workspace's list panel.
 $("ribbon-mat-library").append(
@@ -3120,6 +3142,7 @@ const SHORTCUTS = [
   { group: "View", keys: ["x"], label: "Toggle x-ray ghosts of hidden selections", run: () => $("xray").click() },
   { group: "View", keys: ["v"], label: "Show or hide void cells", run: () => $("void").click() },
   { group: "View", keys: ["w"], label: "Show or hide the world box wireframe", run: () => $("world-box").click() },
+  { group: "View", keys: ["g"], label: "Show or hide the grid plane", run: () => $("grid-toggle").click() },
   { group: "View", keys: ["m"], label: "Color by material (with a legend) or by cell", run: () => $("color-material").click() },
   { group: "View", keys: ["k"], label: "Toggle the cutaway (section, quarter or eighth cut)", run: () => setCutawayMode(cutaway.mode === "off" ? cutaway.lastMode : "off") },
   { group: "Help", keys: ["?"], global: true, label: "Show this list", run: () => openDialog("shortcuts") },
