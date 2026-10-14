@@ -1507,7 +1507,12 @@ function worldSettings() {
     vec("Min", "min"),
     vec("Max", "max"),
     h("h3", {}, "Display"),
-    field("Segments", numberInput({}, "world.segments", { step: 4, min: 8, integer: true }), "Facets around a full circle for curved OpenMC surfaces (display only)"),
+    field("Segments", numberInput({}, "world.segments", { step: 4, min: 8, integer: true }), "Facets around a full circle for curved OpenMC surfaces (display only); with Adaptive, for the largest ones"),
+    field(
+      "Adaptive",
+      h("input", { type: "checkbox", checked: w.adaptive !== false, dataset: { path: "world.adaptive" }, style: "justify-self:start" }),
+      "Fewer segments for smaller surfaces (∝ √radius), keeping facets about the same size: much faster for models with many small curved surfaces",
+    ),
     field("Up axis", select_("world.up", [["z", "Z up (OpenMC)"], ["y", "Y up"]], w.up)),
   );
 }
@@ -1953,7 +1958,7 @@ function onFormInput(e) {
   if (value === undefined) return;
   if (path === "world.auto") return; // handled on change
   for (const node of editTargets(path)) setPath(node, path, value);
-  if (path.startsWith("world.")) scene.world.auto = path === "world.segments" || path === "world.up" ? scene.world.auto : false;
+  if (path.startsWith("world.")) scene.world.auto = path === "world.segments" || path === "world.up" || path === "world.adaptive" ? scene.world.auto : false;
   schedule();
 }
 

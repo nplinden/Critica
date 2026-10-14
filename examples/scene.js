@@ -86,7 +86,10 @@ export function isIdentity(t) {
 }
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
-const DEFAULT_WORLD = () => ({ auto: true, min: [-10, -10, -10], max: [10, 10, 10], segments: 48, up: "z" });
+const DEFAULT_WORLD = () => ({ auto: true, min: [-10, -10, -10], max: [10, 10, 10], segments: 48, adaptive: true, up: "z" });
+
+/** Tessellation levels for adaptive segments: coarse steps, so surfaces of similar size share one. */
+const SEGMENT_LEVELS = [12, 16, 24, 32, 48, 64, 96, 128, 192, 256];
 
 export class Scene {
   constructor() {
@@ -868,15 +871,16 @@ function interiorForm(s, world, tag) {
 
 /**
  * Whether the tessellated sphere `a` lies strictly inside the tessellated
- * sphere `b`. Concentric spheres with the same tessellation are scaled copies
- * of each other, so a smaller radius is enough; otherwise `a` must clear the
- * facets of `b`, which sit up to (1 − cos²(π/segments))·r inside its sphere.
+ * sphere `b` (forms carry their `segments`). Concentric spheres with the same
+ * tessellation are scaled copies of each other, so a smaller radius is
+ * enough; otherwise `a` (inscribed in its sphere) must clear the facets of
+ * `b`, which sit up to (1 − cos²(π/segments))·r inside its sphere.
  */
-function sphereWithin(a, b, segments) {
+function sphereWithin(a, b) {
   const d = Math.hypot(...a.center.map((v, i) => v - b.center[i]));
   const eps = 1e-12 * Math.max(1, b.r);
-  if (d <= eps) return a.r < b.r - eps;
-  const facet = Math.cos(Math.PI / segments) ** 2;
+  if (d <= eps && a.segments === b.segments) return a.r < b.r - eps;
+  const facet = Math.cos(Math.PI / b.segments) ** 2;
   return d + a.r < b.r * facet - eps;
 }
 
@@ -978,7 +982,23 @@ export class Evaluator {
 
   #ctx(world, stack) {
     const segments = this.segments;
-    return { world, stack, segments, key: boxKey(world) + segments };
+    const adaptive = this.scene.world.adaptive !== false;
+    return { world, stack, segments, adaptive, key: `${boxKey(world)}${segments}${adaptive ? "a" : ""}` };
+  }
+
+  /**
+   * Segments around a full circle of radius `r`: the setting for surfaces as
+   * large as half the world box, and, when adaptive, fewer for smaller ones,
+   * keeping the facet error (r·(1 − cos(π/n)) ≈ r·π²/2n²) about constant:
+   * n ∝ √r, rounded up to a level of SEGMENT_LEVELS, at least 12.
+   */
+  #segmentsFor(r, ctx) {
+    const top = ctx.segments;
+    if (!ctx.adaptive || !(r > 0)) return top;
+    const half = Math.max(...ctx.world.max.map((v, i) => v - ctx.world.min[i])) / 2;
+    const want = top * Math.sqrt(Math.min(1, r / half));
+    const level = SEGMENT_LEVELS.find((l) => l >= want) ?? top;
+    return Math.max(Math.min(12, top), Math.min(top, level));
   }
 
   #worldSolid(ctx) {
@@ -1165,7 +1185,6 @@ export class Evaluator {
    */
   #nestedIntersect(P, N) {
     if (!this.fastPaths || !P.length) return null;
-    const segs = this.segments;
     const kind = (v) => v.form?.kind;
     const keyOf = (ps, ns) => `nest(${ps.map((v) => v.key).join(",")};${ns.map((v) => v.key).join(",")})`;
     const rest = (used) => [...P, ...N].filter((v) => !used.includes(v));
@@ -1178,11 +1197,11 @@ export class Evaluator {
     // Spheres.
     const sphereP = P.filter((v) => kind(v) === "sphere");
     if (sphereP.length) {
-      const inner = sphereP.find((a) => sphereP.every((b) => b === a || sphereWithin(a.form, b.form, segs)));
+      const inner = sphereP.find((a) => sphereP.every((b) => b === a || sphereWithin(a.form, b.form)));
       const otherP = P.filter((v) => kind(v) !== "sphere");
       if (inner && !otherP.length) {
         const holes = [];
-        for (const n of N) if (kind(n) === "sphere" && sphereWithin(n.form, inner.form, segs) && holes.every((h) => spheresApart(h.form, n.form))) holes.push(n);
+        for (const n of N) if (kind(n) === "sphere" && sphereWithin(n.form, inner.form) && holes.every((h) => spheresApart(h.form, n.form))) holes.push(n);
         if (holes.length || sphereP.length > 1 || rest([...sphereP]).length === 0) {
           let part;
           if (!holes.length) part = { key: inner.key, solid: inner.solid, inverted: false };
@@ -1233,7 +1252,7 @@ export class Evaluator {
     const used = [...cylP, ...cylN, ...boxes];
     const key = keyOf([...cylP, ...boxes], cylN);
     const solid = this.#memo(key, () =>
-      this.geo.tube({ start: at(z0), end: at(z1), innerRadius: inner.r, radius: outer.r, slices: segs, tags: { outer: outer.tag, inner: inner.tag, start: tag0, end: tag1 } }),
+      this.geo.tube({ start: at(z0), end: at(z1), innerRadius: inner.r, radius: outer.r, slices: outer.segments, innerSlices: inner.segments ?? outer.segments, tags: { outer: outer.tag, inner: inner.tag, start: tag0, end: tag1 } }),
     );
     if (solid.isEmpty) return EMPTY;
     return finish({ key, solid, inverted: false }, used);
@@ -1377,7 +1396,9 @@ export class Evaluator {
     }
     const solid = this.#memo(key, () => this.#interior(surface, shape, ctx, tag));
     if (!solid) return neg === interiorIsNegative ? EMPTY : FULL;
-    return { key, solid, inverted: neg !== interiorIsNegative, form: interiorForm(surface, ctx.world, tag) };
+    const form = interiorForm(surface, ctx.world, tag);
+    if (form) form.segments = this.#segmentsFor(form.r, ctx);
+    return { key, solid, inverted: neg !== interiorIsNegative, form };
   }
 
   #planeSide({ n, d }, neg, ctx, tag) {
@@ -1431,7 +1452,8 @@ export class Evaluator {
     const reach = (p) => Math.hypot(...[0, 1, 2].map((i) => Math.max(Math.abs(min[i] - p[i]), Math.abs(max[i] - p[i])))) * 1.01 + 1e-9;
 
     if (type === "sphere") {
-      return this.#finish(geo.sphere({ center: c.slice(0, 3), radius: c[3], slices: segs, stacks: Math.ceil(segs / 2) }), tag);
+      const n = this.#segmentsFor(c[3], ctx);
+      return this.#finish(geo.sphere({ center: c.slice(0, 3), radius: c[3], slices: n, stacks: Math.ceil(n / 2) }), tag);
     }
     if (type.endsWith("cylinder")) {
       const k = axisOf(type);
@@ -1443,13 +1465,15 @@ export class Evaluator {
       const end = [...center];
       start[k] = min[k];
       end[k] = max[k];
-      return this.#finish(geo.cylinder({ start, end, radius: c[2], slices: segs }), tag);
+      return this.#finish(geo.cylinder({ start, end, radius: c[2], slices: this.#segmentsFor(c[2], ctx) }), tag);
     }
     if (type.endsWith("cone")) {
       const k = axisOf(type);
       const apex = c.slice(0, 3);
       const slope = Math.sqrt(c[3]);
       const nappes = [];
+      // Both nappes share the tessellation of the widest base.
+      const n = this.#segmentsFor(slope * Math.max(max[k] - apex[k], apex[k] - min[k]), ctx);
       for (const [limit, dir] of [
         [max[k], 1],
         [min[k], -1],
@@ -1458,7 +1482,7 @@ export class Evaluator {
         if (len <= 1e-12) continue;
         const base = [...apex];
         base[k] += dir * len;
-        nappes.push(geo.cone({ start: base, end: apex, radius: slope * len, slices: segs }));
+        nappes.push(geo.cone({ start: base, end: apex, radius: slope * len, slices: n }));
       }
       if (!nappes.length) return null;
       const both = nappes.length === 1 ? nappes[0] : nappes[0].union(nappes[1]);
@@ -1471,7 +1495,7 @@ export class Evaluator {
       // Builder tori are Y-axis; an axial scale makes the tube elliptical (B axial, C radial).
       const rot = k === 0 ? M4.rotationAxis(2, -90) : k === 2 ? M4.rotationAxis(0, 90) : M4.IDENTITY;
       const m = M4.compose(M4.translation(c.slice(0, 3)), rot, M4.scaling([1, B / C, 1]));
-      return this.#finish(geo.torus({ major: A, minor: C, segments: segs, rings: Math.ceil(segs / 2) }), tag, m);
+      return this.#finish(geo.torus({ major: A, minor: C, segments: this.#segmentsFor(A + C, ctx), rings: Math.ceil(this.#segmentsFor(C, ctx) / 2) }), tag, m);
     }
     if (type === "quadric") {
       // basis: rows = world axes, columns = principal axes.

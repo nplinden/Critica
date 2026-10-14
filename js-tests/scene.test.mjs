@@ -369,3 +369,38 @@ test("nested fast path: same solids as the general booleans, far fewer operation
   // A shell with a channel through it (partial: merged shell, then the channel).
   compare([[[1, "+"], [2, "-"], [3, "+"]]], [...spheres.slice(0, 2), { type: "y-cylinder", coeffs: [0, 0, 0.5] }]);
 });
+
+test("adaptive tessellation: fewer segments for small surfaces, matching shared faces", () => {
+  const s = new Scene();
+  s.world = { ...s.world, auto: false, min: [-10, -10, -10], max: [10, 10, 10], segments: 48 };
+  const big = s.addHalfspace("sphere", [0, 0, 0, 10], "-");
+  const small = s.addHalfspace("sphere", [5, 0, 0, 0.5], "-");
+  const tris = (adaptive) => {
+    s.world.adaptive = adaptive;
+    const ev = new Evaluator(geo);
+    const out = ev.run(s);
+    const t = [big, small].map((n) => out.parts.get(n.id)[0].solid.triangleCount);
+    ev.dispose();
+    return t;
+  };
+  const [bigA, smallA] = tris(true);
+  const [bigF, smallF] = tris(false);
+  assert.equal(bigA, bigF, "surfaces as large as half the world keep the setting");
+  assert.ok(smallA < smallF / 4, `small sphere: ${smallA} vs ${smallF} triangles`);
+  // A shell between concentric spheres of different tessellations is still exact.
+  const t = new Scene();
+  t.world = { ...t.world, auto: false, min: [-10, -10, -10], max: [10, 10, 10], segments: 48 };
+  const a = t.addSurface({ type: "sphere", coeffs: [0, 0, 0, 2] });
+  const b = t.addSurface({ type: "sphere", coeffs: [0, 0, 0, 9] });
+  const cell = t.add("cell");
+  const and = t.add("intersect", {}, cell.id);
+  t.add("halfspace", { params: { surface: a, sense: "+" } }, and.id);
+  t.add("halfspace", { params: { surface: b, sense: "-" } }, and.id);
+  const vol = (fast) => {
+    const ev = new Evaluator(geo, { fastPaths: fast });
+    const v = ev.run(t).parts.get(cell.id)[0].solid.volume;
+    ev.dispose();
+    return v;
+  };
+  close(vol(true), vol(false), 1e-9 * vol(false));
+});

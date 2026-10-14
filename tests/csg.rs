@@ -270,10 +270,15 @@ fn ffi_round_trip() {
 fn tube_and_merge_match_booleans() {
     use critica::primitives::{frustum, sphere, tube};
     let (a, b) = (Vec3::new(0.0, 0.0, -2.0), Vec3::new(0.0, 0.0, 3.0));
-    let annulus = tube(a, b, 1.0, 2.0, 40, [1, 2, 3, 4]);
+    let annulus = tube(a, b, 1.0, 2.0, 40, 40, [1, 2, 3, 4]);
     let boolean = frustum(a, b, 2.0, 2.0, 40).subtract(&frustum(a, b, 1.0, 1.0, 40));
     assert!((annulus.volume() - boolean.volume()).abs() < 1e-9);
-    assert!((tube(a, b, 0.0, 2.0, 40, [0; 4]).volume() - frustum(a, b, 2.0, 2.0, 40).volume()).abs() < 1e-9);
+    assert!((tube(a, b, 0.0, 2.0, 40, 40, [0; 4]).volume() - frustum(a, b, 2.0, 2.0, 40).volume()).abs() < 1e-9);
+    // Different ring counts: the caps are stitched, still a closed solid.
+    let mixed = tube(a, b, 1.0, 2.0, 48, 16, [1, 2, 3, 4]);
+    let reference = frustum(a, b, 2.0, 2.0, 48).subtract(&frustum(a, b, 1.0, 1.0, 16));
+    assert!((mixed.volume() - reference.volume()).abs() < 1e-9);
+    assert!((mixed.surface_area() - reference.surface_area()).abs() < 1e-9);
     let outer = sphere(Vec3::new(0.0, 0.0, 0.0), 2.0, 24, 12);
     let inner = sphere(Vec3::new(0.0, 0.0, 0.0), 1.5, 24, 12);
     assert!((outer.merge(&inner.inverse()).volume() - outer.subtract(&inner).volume()).abs() < 1e-9);

@@ -162,7 +162,8 @@ pub extern "C" fn geo_tube(
     ez: f64,
     r_inner: f64,
     r_outer: f64,
-    slices: u32,
+    slices_outer: u32,
+    slices_inner: u32,
     tag_outer: u32,
     tag_inner: u32,
     tag_start: u32,
@@ -173,7 +174,8 @@ pub extern "C" fn geo_tube(
         Vec3::new(ex, ey, ez),
         r_inner,
         r_outer,
-        slices,
+        slices_outer,
+        slices_inner,
         [tag_outer, tag_inner, tag_start, tag_end],
     ))
 }

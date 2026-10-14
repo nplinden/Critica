@@ -78,7 +78,7 @@ npm run demo    # builder at http://localhost:1948/
   New, From library, Duplicate and Delete. When one operation, cell or universe is selected,
   new nodes go inside it.
 - **Top bar**: a *File* menu (New, Open… <kbd>Ctrl+O</kbd>, Save
-  <kbd>Ctrl+S</kbd>, Export as → OpenMC XML…), *Preferences* (light/dark theme or follow the OS, viewport statistics,
+  <kbd>Ctrl+S</kbd>, Export as → OpenMC XML…), *Preferences* (light/dark theme or follow the OS, viewport statistics, adaptive tessellation,
   world box, curved-surface tessellation, up axis), and *Help* (Tutorial…, Keyboard shortcuts…
   <kbd>?</kbd>).
 - **Scene tree**: shows the CSG tree. Subtract children are badged *base* or
@@ -338,6 +338,13 @@ from Google Fonts.
   `solid.merge`). Other operands are then applied with the general booleans.
   On the 378 drawable ICSBEP models this makes the first evaluation 9.5×
   faster (Godiva: 1.5 s → 7 ms), with the same solids.
+- **Adaptive tessellation**: the *Segments* preference applies to surfaces as
+  large as half the world box; smaller curved surfaces get fewer segments
+  (∝ √radius, in steps of 12, 16, 24, 32, 48, …, at least 12), so facets keep
+  about the same size. Tessellation depends only on the surface, so faces
+  shared by neighbouring cells still match, and the annulus generator stitches
+  rings of different counts. Another 1.5× on the ICSBEP models (32% fewer
+  triangles); turn it off with *Preferences → Adaptive*.
 - **Robustness**: planes come from Newell's method; degenerate polygons and
   repeated vertices are dropped. A bounding-box check short-circuits booleans
   on disjoint operands. Mirroring transforms reverse winding so solids stay
