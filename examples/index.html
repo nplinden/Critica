@@ -207,6 +207,14 @@
   dialog.modal[open] { display: flex; flex-direction: column; }
   dialog.modal::backdrop { background: rgba(0, 0, 0, 0.45); }
   dialog#tutorial, dialog#shortcuts { width: min(560px, calc(100vw - 32px)); }
+  dialog#xml-preview { width: min(900px, calc(100vw - 32px)); height: calc(100vh - 64px); }
+  #xml-preview-body { display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: 1; padding-top: 10px; }
+  .xml-preview-bar { display: flex; align-items: center; gap: 8px; }
+  .xml-preview-bar .segmented { flex: none; }
+  .xml-preview-bar .spacer { flex: 1; }
+  .xml-preview-bar .tb { border-color: var(--line-2); }
+  #xml-preview-body .xml-preview { flex: 1; max-height: none; min-height: 0; }
+  .xml-preview-warnings { margin: 0; padding: 6px 8px 6px 24px; border: 1px solid var(--warn-border); border-radius: 5px; color: var(--hl); font-size: 12px; }
   .dialog-body { overflow-y: auto; padding: 4px 16px 16px; line-height: 1.55; }
   .dialog-body h3 { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 14px 0 6px; }
   .dialog-body p, .dialog-body ol, .dialog-body ul { margin: 4px 0 8px; }
@@ -349,6 +357,7 @@
       </div>
       <div class="rgroup-label">View</div>
     </div>
+    <div class="rgroup"><div class="rgroup-body big"><button class="tb" id="xml-preview-open" title="Show the OpenMC XML that File → Export as would write"></button></div><div class="rgroup-label">OpenMC</div></div>
   </div>
   <div class="ribbon-panel" id="ribbon-materials" role="tabpanel" aria-labelledby="tab-materials" hidden>
     <div class="rgroup"><div class="rgroup-body big" id="ribbon-mat-library"></div><div class="rgroup-label">Library</div></div>
@@ -368,6 +377,13 @@
     <button class="tb dialog-close" title="Close (Esc)" aria-label="Close">✕</button>
   </div>
   <div class="dialog-body" id="shortcuts-body"></div>
+</dialog>
+<dialog class="modal" id="xml-preview" aria-labelledby="xml-preview-title">
+  <div class="dialog-head">
+    <h2 id="xml-preview-title">OpenMC XML preview</h2>
+    <button class="tb dialog-close" title="Close (Esc)" aria-label="Close">✕</button>
+  </div>
+  <div class="dialog-body" id="xml-preview-body"></div>
 </dialog>
 <dialog class="modal" id="settings" aria-labelledby="settings-title">
   <div class="dialog-head">

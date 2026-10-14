@@ -54,6 +54,7 @@ const ICONS = {
   isolate: '<circle cx="8" cy="8" r="2.6" fill="currentColor" fill-opacity=".45"/><circle cx="8" cy="8" r="6" stroke-dasharray="1.4 1.6"/>',
   xray: '<path d="M8 1.5 14 5v6l-6 3.5L2 11V5z M2 5l6 3.5L14 5 M8 8.5v6" stroke-dasharray="1.4 1.3"/>',
   add: '<path d="M8 3v10M3 8h10"/>',
+  xml: '<path d="M5.5 4 2 8l3.5 4M10.5 4 14 8l-3.5 4M9.2 2.5 6.8 13.5"/>',
   more: '<rect x="2" y="2" width="5" height="5" rx="1"/><circle cx="11.5" cy="4.5" r="2.5"/><path d="M4.5 9 7 14H2z"/><path d="M9 11.5h5M11.5 9v5"/>',
   library: '<path d="M2.5 2.5h3v11h-3z M6.5 2.5h3v11h-3z M10.3 3.2l2.8-.8 2.4 10.6-2.8.8z"/>',
   trash: '<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 9h5.6l.7-9"/>',
@@ -1444,10 +1445,13 @@ function openDialog(id) {
   if (id === "settings") renderSettings();
   if (id === "tutorial") renderTutorial();
   if (id === "shortcuts") renderShortcuts();
+  if (id === "xml-preview") renderXmlPreview();
   $(id).showModal();
 }
 
 $("settings-open").onclick = () => openDialog("settings");
+$("xml-preview-open").append(icon("xml"), h("span", { class: "label" }, "Preview XML"));
+$("xml-preview-open").onclick = () => openDialog("xml-preview");
 
 function renderProps() {
   keepFocus($("props"), renderPropsBody);
@@ -2392,16 +2396,75 @@ function download(name, data, type) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function exportXML(kind) {
-  if (kind === "materials") {
-    download("materials.xml", exportMaterialsXML(scene), "application/xml");
-    setMessage(`Exported materials.xml (${Object.keys(scene.materials).length} materials).`);
-    return;
-  }
+/** The XML File → Export as writes for `kind` ("geometry", "materials" or "model"), with its warnings. */
+function openmcXML(kind) {
+  if (kind === "materials") return { text: exportMaterialsXML(scene), warnings: [] };
   const out = exportOpenMC(scene);
-  const warnings = [...out.warnings, ...(kind === "model" ? (out.modelWarnings ?? []) : [])];
-  download(`${kind}.xml`, kind === "model" ? out.model : out.geometry, "application/xml");
-  setMessage(warnings.length ? `Exported ${kind}.xml with ${warnings.length} warning(s): ${warnings.join(" ")}` : `Exported ${kind}.xml.`, warnings.length > 0);
+  return { text: kind === "model" ? out.model : out.geometry, warnings: [...out.warnings, ...(kind === "model" ? (out.modelWarnings ?? []) : [])] };
+}
+
+function exportXML(kind) {
+  const { text, warnings } = openmcXML(kind);
+  download(`${kind}.xml`, text, "application/xml");
+  if (kind === "materials") setMessage(`Exported materials.xml (${Object.keys(scene.materials).length} materials).`);
+  else setMessage(warnings.length ? `Exported ${kind}.xml with ${warnings.length} warning(s): ${warnings.join(" ")}` : `Exported ${kind}.xml.`, warnings.length > 0);
+}
+
+// ---- XML preview (Geometry ribbon → OpenMC → Preview XML) ----
+let previewKind = "geometry";
+
+function renderXmlPreview() {
+  let result;
+  try {
+    result = openmcXML(previewKind);
+  } catch (e) {
+    result = { error: e.message ?? String(e), warnings: [] };
+  }
+  const file = `${previewKind}.xml`;
+  const copy = h("button", { class: "tb", disabled: Boolean(result.error), title: "Copy the XML to the clipboard" }, "Copy");
+  copy.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(result.text);
+      copy.textContent = "Copied";
+    } catch {
+      copy.textContent = "Copy failed";
+    }
+    setTimeout(() => (copy.textContent = "Copy"), 1500);
+  };
+  // replaceChildren would print `false` for a skipped part: filter them out.
+  const parts = [
+    h(
+      "div",
+      { class: "xml-preview-bar" },
+      h(
+        "div",
+        { class: "segmented", role: "tablist" },
+        [["geometry", "geometry.xml"], ["materials", "materials.xml"], ["model", "model.xml"]].map(([kind, label]) =>
+          h(
+            "button",
+            {
+              class: `tb seg${kind === previewKind ? " on" : ""}`,
+              role: "tab",
+              "aria-selected": String(kind === previewKind),
+              onclick: () => {
+                previewKind = kind;
+                renderXmlPreview();
+              },
+            },
+            label,
+          ),
+        ),
+      ),
+      h("span", { class: "spacer" }),
+      copy,
+      h("button", { class: "tb", disabled: Boolean(result.error), title: `Download ${file}`, onclick: () => exportXML(previewKind) }, "Download"),
+    ),
+    result.warnings.length > 0 && h("ul", { class: "xml-preview-warnings" }, result.warnings.map((w) => h("li", {}, w))),
+    result.error
+      ? h("div", { class: "msg-err" }, `This file cannot be exported yet: ${result.error}`)
+      : h("pre", { class: "xml-preview" }, result.text),
+  ];
+  $("xml-preview-body").replaceChildren(...parts.filter(Boolean));
 }
 
 function replaceScene(next, message = "") {
