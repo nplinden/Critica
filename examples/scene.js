@@ -917,6 +917,9 @@ export class Evaluator {
    *  values  Map<node id, Value>
    *  errors  Map<node id, string>
    *  world   the resolved world box
+   *  partial  true when `deadline` stopped the run early: only the first
+   *          `done` of `total` top-level items are in `parts`; run again to
+   *          continue (built solids stay cached, so nothing is redone)
    *  surfaces  Map<key, Solid | null>  for each requested `surfaces` entry
    *          ({ key, surface, tag }): the inside of that surface around the
    *          world box. Its faces off the world box are the surface itself.
@@ -924,17 +927,26 @@ export class Evaluator {
    * same solid with its leaf tags, when the part's faces were re-tagged). Solids are owned by the
    * evaluator: do not dispose them.
    */
-  run(scene, { focus = [], surfaces = [] } = {}) {
+  run(scene, { focus = [], surfaces = [], deadline = Infinity } = {}) {
     this.scene = scene;
     this.used = new Map();
     const world = scene.resolveWorld();
-    const out = { parts: new Map(), solids: new Map(), values: new Map(), errors: new Map(), world, surfaces: new Map() };
+    const items = scene.roots.filter((n) => n.enabled);
+    const out = { parts: new Map(), solids: new Map(), values: new Map(), errors: new Map(), world, surfaces: new Map(), partial: false, done: 0, total: items.length };
     this.out = out;
     const ctx = this.#ctx(world, []);
     try {
-      for (const node of scene.roots) {
-        if (!node.enabled) continue;
+      // Item by item; past `deadline` the run stops, once it has built
+      // something new (cached items are instant), and the caller draws what is
+      // built and runs again later.
+      this.built = 0;
+      for (const node of items) {
+        if (this.built > 0 && performance.now() > deadline) {
+          out.partial = true;
+          return out;
+        }
         out.parts.set(node.id, this.#itemParts(node, ctx));
+        out.done++;
       }
       for (const id of focus) {
         if (out.solids.has(id)) continue;
@@ -956,8 +968,13 @@ export class Evaluator {
         }
       }
     } finally {
-      for (const [key, solid] of this.cache) if (!this.used.has(key)) solid?.dispose();
-      this.cache = this.used;
+      if (out.partial) {
+        // Keep everything: the rest of the scene still needs the cached solids.
+        for (const [key, solid] of this.used) this.cache.set(key, solid);
+      } else {
+        for (const [key, solid] of this.cache) if (!this.used.has(key)) solid?.dispose();
+        this.cache = this.used;
+      }
       this.used = null;
     }
     return out;
@@ -970,7 +987,9 @@ export class Evaluator {
 
   #memo(key, build) {
     if (this.used.has(key)) return this.used.get(key);
-    const solid = this.cache.has(key) ? this.cache.get(key) : build();
+    const cached = this.cache.has(key);
+    if (!cached) this.built++;
+    const solid = cached ? this.cache.get(key) : build();
     this.used.set(key, solid);
     return solid;
   }

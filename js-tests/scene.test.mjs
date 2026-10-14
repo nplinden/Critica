@@ -404,3 +404,21 @@ test("adaptive tessellation: fewer segments for small surfaces, matching shared 
   };
   close(vol(true), vol(false), 1e-9 * vol(false));
 });
+
+test("a deadline builds the scene item by item, keeping finished work", () => {
+  const s = new Scene();
+  for (let i = 0; i < 4; i++) s.add("sphere", { transform: { position: [i * 3, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } });
+  const ev = new Evaluator(geo);
+  const first = ev.run(s, { deadline: 0 }); // past already: one item per run
+  assert.equal(first.partial, true);
+  assert.deepEqual([first.done, first.total, first.parts.size], [1, 4, 1]);
+  const solid = first.parts.get(s.roots[0].id)[0].solid;
+  const second = ev.run(s, { deadline: 0 });
+  assert.equal(second.parts.get(s.roots[0].id)[0].solid, solid, "the first item is not rebuilt");
+  assert.equal(second.done, 2);
+  const full = ev.run(s);
+  assert.equal(full.partial, false);
+  assert.equal(full.parts.size, 4);
+  assert.equal(full.parts.get(s.roots[0].id)[0].solid, solid);
+  ev.dispose();
+});

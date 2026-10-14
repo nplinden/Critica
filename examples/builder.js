@@ -307,21 +307,51 @@ function schedule({ props = false } = {}) {
     });
 }
 
-function refresh({ props = true, fit = false } = {}) {
-  setMessage("");
+// Building a large scene runs item by item across frames (see Evaluator.run's
+// deadline): each frame builds for about BUILD_BUDGET_MS, draws what is ready
+// and continues on the next one, so the page never freezes for the whole build.
+const BUILD_BUDGET_MS = 40;
+let building = null; // { fit, props } owed once a progressive build completes
+let buildFrame = 0;
+let lastPartialDraw = 0; // partial states are drawn at most every PARTIAL_DRAW_MS
+const PARTIAL_DRAW_MS = 150;
+
+function refresh({ props = true, fit = false, resume = false } = {}) {
+  if (!resume) setMessage("");
+  cancelAnimationFrame(buildFrame);
   nodeById = new Map();
   scene.walk((n) => nodeById.set(n.id, n));
   try {
     const t0 = performance.now();
     displayed = displayedSurfaces();
     const curved = displayed.map((d, i) => ({ key: d.key, surface: d.surface, tag: SURFACE_TAG + i })).filter((d) => !isPlane(d.surface.type));
-    results = evaluator.run(scene, { focus: selection, surfaces: curved });
+    results = evaluator.run(scene, { focus: selection, surfaces: curved, deadline: t0 + BUILD_BUDGET_MS });
     lastEvalMs = performance.now() - t0;
   } catch (e) {
     // The evaluator disposed any stale solids, so drop the old results too.
     results = { parts: new Map(), solids: new Map(), values: new Map(), errors: new Map(), world: null };
     setMessage(`Evaluation failed: ${e.message ?? e}`, true);
   }
+  if (results.partial) {
+    // Draw what is built, then continue; framing and the properties wait for the end.
+    building = { fit: fit || Boolean(building?.fit), props: props || Boolean(building?.props) };
+    setProgress(`Building geometry · ${results.done} / ${results.total}`);
+    if (performance.now() - lastPartialDraw > PARTIAL_DRAW_MS) {
+      viewer.setUp(scene.world.up);
+      renderViewport(false);
+      renderTree();
+      updateToolbar();
+      lastPartialDraw = performance.now();
+    }
+    buildFrame = requestAnimationFrame(() => refresh({ props: false, resume: true }));
+    return;
+  }
+  if (building) {
+    fit ||= building.fit;
+    props ||= building.props;
+    building = null;
+  }
+  setProgress(null);
   if (results.errors.size) {
     const [id, msg] = results.errors.entries().next().value;
     setMessage(`⚠ ${results.errors.size} node${results.errors.size > 1 ? "s" : ""} failed — "${nodeById.get(id)?.name}": ${msg}`, true);
@@ -810,11 +840,26 @@ function renderViewport(fit) {
 }
 
 function setMessage(text, error = false) {
+  delete $("msg").dataset.progress;
   $("msg").textContent = text;
   $("status").classList.toggle("error", error);
   // The Materials workspace has its own status line.
   $("mat-status").textContent = text;
   $("mat-status").classList.toggle("error", error);
+}
+
+/** Build progress in the status line, unless a message is shown there; null clears it. */
+function setProgress(text) {
+  const msg = $("msg");
+  if (text) {
+    if (!msg.textContent || msg.dataset.progress) {
+      msg.textContent = text;
+      msg.dataset.progress = "1";
+    }
+  } else if (msg.dataset.progress) {
+    delete msg.dataset.progress;
+    msg.textContent = "";
+  }
 }
 
 // ---- tree --------------------------------------------------------------------
@@ -3497,7 +3542,7 @@ commit();
 // moment (about 1.5 s for a 22-cell benchmark), and the page used to stay
 // blank until it was done.
 scene.walk((n) => nodeById.set(n.id, n));
-setMessage("Building geometry…");
+setProgress("Building geometry…");
 renderTree();
 renderProps();
 updateToolbar();

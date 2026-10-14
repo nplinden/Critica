@@ -345,6 +345,13 @@ from Google Fonts.
   shared by neighbouring cells still match, and the annulus generator stitches
   rings of different counts. Another 1.5× on the ICSBEP models (32% fewer
   triangles); turn it off with *Preferences → Adaptive*.
+- **Progressive builds**: the evaluator takes a deadline and builds the scene
+  one top-level item (cell) at a time; when the budget (40 ms per frame) runs
+  out it returns a partial result, keeps everything built so far cached, and
+  the builder draws it and continues on the next frame, with
+  "Building geometry · n / m" in the status line. A large scene appears cell
+  by cell instead of freezing the page; the longest pause is the slowest
+  single cell.
 - **Robustness**: planes come from Newell's method; degenerate polygons and
   repeated vertices are dropped. A bounding-box check short-circuits booleans
   on disjoint operands. Mirroring transforms reverse winding so solids stay
