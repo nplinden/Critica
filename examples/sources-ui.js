@@ -187,13 +187,9 @@ export function createSourcesWorkspace(ctx) {
 
   /** A section whose distribution may be left to OpenMC's default: a note and a button, or the editor and a ✕. */
   function optional(title, value, { defaultNote, addLabel, addTitle, add, remove, extra = null }, editor) {
-    if (!value)
-      return section(
-        title,
-        h("div", { class: "note" }, defaultNote),
-        h("div", { class: "props-actions" }, h("button", { class: "tb", title: addTitle, onclick: () => edit(add) }, `+ ${addLabel}`)),
-        extra,
-      );
+    // Unset: just the button (OpenMC's default in its tooltip); the heading,
+    // the editor and any extras appear once it is clicked.
+    if (!value) return h("div", { class: "section optional-add" }, h("button", { class: "tb", title: `${addTitle}. ${defaultNote}`, onclick: () => edit(add) }, `+ ${addLabel}`));
     return h(
       "div",
       { class: "section" },
