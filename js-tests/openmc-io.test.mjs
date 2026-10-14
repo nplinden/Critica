@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { init } from "../pkg/critica.js";
-import { Scene, Evaluator, isCell } from "../examples/scene.js";
+import { Scene, Evaluator, isCell } from "../app/scene.js";
 import { demoScene } from "./fixtures.mjs";
-import { importOpenMC } from "../examples/openmc/import.js";
-import { exportOpenMC } from "../examples/openmc/export.js";
-import { locate } from "../examples/openmc/locate.js";
+import { importOpenMC } from "../app/openmc/import.js";
+import { exportOpenMC } from "../app/openmc/export.js";
+import { locate } from "../app/openmc/locate.js";
 
 const geo = await init();
 const CORPUS = new URL("../knowledge/openmc/tests/", import.meta.url);

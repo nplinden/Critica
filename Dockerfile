@@ -23,7 +23,7 @@ RUN cargo build --release --target wasm32-unknown-unknown \
 FROM nginxinc/nginx-unprivileged:1.27-alpine
 
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --chown=nginx:nginx examples /usr/share/nginx/html
+COPY --chown=nginx:nginx app /usr/share/nginx/html
 COPY --chown=nginx:nginx pkg/critica.js pkg/critica.d.ts /usr/share/nginx/html/pkg/
 COPY --from=build --chown=nginx:nginx /src/critica.wasm /usr/share/nginx/html/pkg/critica.wasm
 

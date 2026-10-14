@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { parseXML, getText, getList, children, element, serializeXML } from "../examples/openmc/xml.js";
-import { parseRegion, formatRegion, contains, regionBounds } from "../examples/openmc/region.js";
+import { parseXML, getText, getList, children, element, serializeXML } from "../app/openmc/xml.js";
+import { parseRegion, formatRegion, contains, regionBounds } from "../app/openmc/region.js";
 import {
   SURFACE_TYPES,
   evaluate,
@@ -14,8 +14,8 @@ import {
   classifyQuadric,
   symmetricEigen,
   halfspaceBounds,
-} from "../examples/openmc/surfaces.js";
-import { fromTransform, compose, translation, rotationAxis, scaling, transformPoint, invert, rotationToOpenMCAngles, linear3 } from "../examples/mat4.js";
+} from "../app/openmc/surfaces.js";
+import { fromTransform, compose, translation, rotationAxis, scaling, transformPoint, invert, rotationToOpenMCAngles, linear3 } from "../app/mat4.js";
 
 const CORPUS = new URL("../knowledge/openmc/", import.meta.url);
 

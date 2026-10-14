@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { init } from "../pkg/critica.js";
-import { Scene, Evaluator, mergeMeshes, meshBounds } from "../examples/scene.js";
+import { Scene, Evaluator, mergeMeshes, meshBounds } from "../app/scene.js";
 import { demoScene } from "./fixtures.mjs";
 
 const geo = await init();
@@ -280,7 +280,7 @@ test("adding a material copy without an id allocates the next free id", () => {
 });
 
 test("a disabled source is hidden but its references still use it", async () => {
-  const { exportOpenMC } = await import("../examples/openmc/export.js");
+  const { exportOpenMC } = await import("../app/openmc/export.js");
   const s = new Scene();
   const rod = s.add("cylinder", { params: { radius: 0.3, height: 10, slices: 24, axis: "z" } });
   const cell = s.add("cell");

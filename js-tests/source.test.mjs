@@ -2,11 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { newSource, validateSource, sourceToXML, sourceFromXML, settingsWithSources, defaultDist, defaultSpace, defaultAngle, sourceShape, DIST_TYPES } from "../examples/source/source.js";
-import { parseXML, serializeXML, children } from "../examples/openmc/xml.js";
-import { Scene } from "../examples/scene.js";
-import { importOpenMC, importSettingsXML } from "../examples/openmc/import.js";
-import { exportOpenMC, exportSettingsXML } from "../examples/openmc/export.js";
+import { newSource, validateSource, sourceToXML, sourceFromXML, settingsWithSources, defaultDist, defaultSpace, defaultAngle, sourceShape, DIST_TYPES } from "../app/source/source.js";
+import { parseXML, serializeXML, children } from "../app/openmc/xml.js";
+import { Scene } from "../app/scene.js";
+import { importOpenMC, importSettingsXML } from "../app/openmc/import.js";
+import { exportOpenMC, exportSettingsXML } from "../app/openmc/export.js";
 
 const xmlOf = (el) => serializeXML(el).replace(/>\s+</g, "><").trim();
 const roundTrip = (src) => sourceFromXML(parseXML(xmlOf(sourceToXML(src)))[0], src.id);

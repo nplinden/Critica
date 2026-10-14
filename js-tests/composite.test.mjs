@@ -1,8 +1,8 @@
 // Point-membership checks ported from OpenMC's tests/unit_tests/test_surface_composite.py.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { expandComposite, COMPOSITE_TYPES, defaultCompositeParams, validatePolygon, convexDecomposition } from "../examples/openmc/composite.js";
-import { contains, regionBounds } from "../examples/openmc/region.js";
+import { expandComposite, COMPOSITE_TYPES, defaultCompositeParams, validatePolygon, convexDecomposition } from "../app/openmc/composite.js";
+import { contains, regionBounds } from "../app/openmc/region.js";
 
 /** Returns inside(p) for the negative side ("-s") of a composite. */
 function composite(type, params) {

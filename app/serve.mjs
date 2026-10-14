@@ -1,6 +1,6 @@
-// Minimal static server: the app (examples/) at the site root and the engine
+// Minimal static server: the app (app/) at the site root and the engine
 // (pkg/) at /pkg/, where the pages' relative ../pkg/ imports resolve.
-// Usage: node examples/serve.mjs [port]
+// Usage: node app/serve.mjs [port]
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
@@ -20,7 +20,7 @@ createServer(async (req, res) => {
   const path = decodeURIComponent(new URL(req.url, "http://x").pathname);
   // Old links: the app used to live under /examples/.
   if (path === "/examples" || path.startsWith("/examples/")) return res.writeHead(301, { location: path.slice("/examples".length) || "/" }).end();
-  const root = join(repo, path.startsWith("/pkg/") ? "" : "examples");
+  const root = join(repo, path.startsWith("/pkg/") ? "" : "app");
   const file = normalize(join(root, path.endsWith("/") ? `${path}index.html` : path));
   if (!file.startsWith(root)) return res.writeHead(403).end();
   try {

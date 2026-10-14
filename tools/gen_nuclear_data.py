@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate examples/materials/*.js data modules from an OpenMC checkout.
+"""Generate app/materials/*.js data modules from an OpenMC checkout.
 
 Reads (no OpenMC import needed):
   openmc/data/data.py                    natural abundances, Avogadro constant
@@ -20,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 OPENMC = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "knowledge" / "openmc"
 DATA = OPENMC / "openmc" / "data"
-OUT = ROOT / "examples" / "materials"
+OUT = ROOT / "app" / "materials"
 
 
 def assigned_literal(source, name):

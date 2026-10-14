@@ -23,9 +23,9 @@
 //   world       bounding box for unbounded half-spaces; auto-computed by default
 //   materials   material library keyed by id (see materials/material.js)
 //   openmc      round-trip data: root universe id, preserved XML elements
-//   sources     external source distributions (examples/source/source.js), written
+//   sources     external source distributions (app/source/source.js), written
 //               into the <settings> of model.xml / settings.xml
-//   settings    simulation settings { values } (examples/settings/settings.js)
+//   settings    simulation settings { values } (app/settings/settings.js)
 //
 // Polygon tags are node ids: every face maps back to the node (primitive, half-
 // space, or cell) that produced it, for colouring and viewport picking.
@@ -532,7 +532,7 @@ export class Scene {
     return copy;
   }
 
-  /** Adds an external source (see examples/source/source.js) with the next free id. */
+  /** Adds an external source (see app/source/source.js) with the next free id. */
   addSource(spaceType = "point", options = {}) {
     const id = Math.max(0, ...this.sources.map((s) => s.id)) + 1;
     const src = newSource(id, spaceType, options);

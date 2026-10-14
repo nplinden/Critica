@@ -18,7 +18,7 @@
   "scripts": {
     "build": "cargo build --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/critica.wasm pkg/",
     "test": "cargo test --release && npm run build && node --test js-tests/*.test.mjs",
-    "demo": "npm run build && node examples/serve.mjs",
+    "demo": "npm run build && node app/serve.mjs",
     "gen:data": "python3 tools/gen_nuclear_data.py"
   }
 }

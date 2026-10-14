@@ -2,11 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { SETTINGS_FIELDS, readSettings, applySettings, validateSettings, defaultSettings, fieldApplies } from "../examples/settings/settings.js";
-import { parseXML, serializeXML } from "../examples/openmc/xml.js";
-import { Scene } from "../examples/scene.js";
-import { importOpenMC } from "../examples/openmc/import.js";
-import { exportOpenMC, exportSettingsXML } from "../examples/openmc/export.js";
+import { SETTINGS_FIELDS, readSettings, applySettings, validateSettings, defaultSettings, fieldApplies } from "../app/settings/settings.js";
+import { parseXML, serializeXML } from "../app/openmc/xml.js";
+import { Scene } from "../app/scene.js";
+import { importOpenMC } from "../app/openmc/import.js";
+import { exportOpenMC, exportSettingsXML } from "../app/openmc/export.js";
 
 const xmlOf = (el) => serializeXML(el).replace(/>\s+</g, "><").trim();
 

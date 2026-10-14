@@ -6,6 +6,7 @@ js-tests
 tests
 docs
 tools
+app/serve.mjs
 .git
 *.stl
 pkg/*.wasm

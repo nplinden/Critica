@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { init } from "../pkg/critica.js";
-import { Scene, Evaluator } from "../examples/scene.js";
-import { COMPOSITE_TYPES } from "../examples/openmc/composite.js";
-import { importOpenMC } from "../examples/openmc/import.js";
-import { exportOpenMC } from "../examples/openmc/export.js";
-import { locate } from "../examples/openmc/locate.js";
+import { Scene, Evaluator } from "../app/scene.js";
+import { COMPOSITE_TYPES } from "../app/openmc/composite.js";
+import { importOpenMC } from "../app/openmc/import.js";
+import { exportOpenMC } from "../app/openmc/export.js";
+import { locate } from "../app/openmc/locate.js";
 
 const geo = await init();
 

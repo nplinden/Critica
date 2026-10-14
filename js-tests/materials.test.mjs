@@ -17,9 +17,9 @@ import {
   fromLibrary,
   atomicMass,
   atomicWeight,
-} from "../examples/materials/material.js";
-import { parseXML, children, serializeXML } from "../examples/openmc/xml.js";
-import PNNL from "../examples/materials/pnnl_v2.js";
+} from "../app/materials/material.js";
+import { parseXML, children, serializeXML } from "../app/openmc/xml.js";
+import PNNL from "../app/materials/pnnl_v2.js";
 
 const close = (a, b, rel = 1e-9) => assert.ok(Math.abs(a - b) <= rel * Math.max(Math.abs(b), 1e-300), `expected ${b}, got ${a}`);
 
@@ -180,7 +180,7 @@ test("benchmark corpus: every materials.xml imports, validates and round-trips",
 });
 
 test("scene material library: users, renaming, legacy scenes", async () => {
-  const { Scene } = await import("../examples/scene.js");
+  const { Scene } = await import("../app/scene.js");
   const scene = new Scene();
   const fuel = scene.addMaterial({ name: "fuel", components: [{ kind: "element", name: "U", percent: 1, type: "ao" }] });
   const water = scene.addMaterial({ name: "water" });
@@ -201,7 +201,7 @@ test("scene material library: users, renaming, legacy scenes", async () => {
 });
 
 test("macroscopic and NCrystal materials are not supported", async () => {
-  const { importMaterialsXML } = await import("../examples/openmc/import.js");
+  const { importMaterialsXML } = await import("../app/openmc/import.js");
   const out = importMaterialsXML(`<materials>
     <material id="1" name="mg"><density units="macro"/><macroscopic name="UO2"/></material>
     <material id="2" name="al" cfg="Al_sg225.ncmat"><density value="2.7" units="g/cm3"/><nuclide name="Al27" ao="1"/></material>

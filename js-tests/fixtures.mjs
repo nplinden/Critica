@@ -1,4 +1,4 @@
-import { Scene } from "../examples/scene.js";
+import { Scene } from "../app/scene.js";
 
 /** The classic CSG demo as an editable tree. */
 export function demoScene() {

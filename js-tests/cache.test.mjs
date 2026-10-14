@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Scene } from "../examples/scene.js";
-import { itemKeys } from "../examples/item-keys.js";
-import { createEvalService } from "../examples/eval-service.js";
+import { Scene } from "../app/scene.js";
+import { itemKeys } from "../app/item-keys.js";
+import { createEvalService } from "../app/eval-service.js";
 
 globalThis.requestAnimationFrame ??= (cb) => setTimeout(cb, 0);
 

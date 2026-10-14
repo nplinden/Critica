@@ -61,7 +61,7 @@ npm run demo    # builder at http://localhost:1948/
 
 ### Builder GUI
 
-`examples/index.html` is a point-and-click modeller:
+`app/index.html` is a point-and-click modeller:
 
 - **Ribbon**: the *Geometry* and *Materials* tabs at the top each have a
   ribbon of tools (collapsible with ▴ or a double-click on the tab). The
@@ -154,7 +154,7 @@ npm run demo    # builder at http://localhost:1948/
   display effect only: the geometry is not modified.
   The scene autosaves to `localStorage`.
 
-The scene model and evaluator (`examples/scene.js`) don't depend on the DOM.
+The scene model and evaluator (`app/scene.js`) don't depend on the DOM.
 Each node's result is cached by a structural key, so editing a shape only
 recomputes that node and its ancestors, and undo is instant.
 
@@ -283,7 +283,7 @@ against OpenMC's source, and the extension points planned for lattices.
 
 ### Script playground
 
-`examples/playground.html` (not linked from the builder; open it directly at
+`app/playground.html` (not linked from the builder; open it directly at
 `/playground.html`) is a live editor. You write JS against `geo`,
 return a solid, then orbit it in WebGL and download it as STL.
 

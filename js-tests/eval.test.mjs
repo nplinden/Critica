@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { init } from "../pkg/critica.js";
-import { Scene } from "../examples/scene.js";
-import { EvalRunner, runJob, partData } from "../examples/eval-data.js";
+import { Scene } from "../app/scene.js";
+import { EvalRunner, runJob, partData } from "../app/eval-data.js";
 
 const geo = await init();
 

@@ -38,7 +38,7 @@ only ever contains the primitives. In Critica a composite is a parametric
 { kind: "composite", params: { type: "hexagonal-prism", sense: "-", values: { edge_length, orientation, … } } }
 ```
 
-`examples/openmc/composite.js` expands it on demand into private surfaces and
+`app/openmc/composite.js` expands it on demand into private surfaces and
 a region (`expandComposite`). Rendering, point location and export all go
 through that expansion, so editing a parameter regenerates everything. The
 `+` side is the complement, which matches OpenMC's default `__pos__`.
@@ -71,7 +71,7 @@ type.
 
 ## Materials
 
-`examples/materials/material.js` mirrors `openmc.Material`:
+`app/materials/material.js` mirrors `openmc.Material`:
 
 - **Format.** `materials.xml` holds only nuclides (`<nuclide name ao|wo>`),
   `<density value units>`, `<sab name fraction>`, `<isotropic>` and the
@@ -104,7 +104,7 @@ comparing each nuclide with the original, and builds all 411 PNNL materials.
 
 ## Sources
 
-`examples/source/source.js` mirrors `openmc.IndependentSource` and the
+`app/source/source.js` mirrors `openmc.IndependentSource` and the
 `openmc.stats` distributions, following `docs/source/io_formats/settings.rst`
 and the Python writers (which differ slightly from the docs):
 
@@ -135,7 +135,7 @@ OpenMC regression inputs.
 
 ## Settings
 
-`examples/settings/settings.js` lists the settings the Settings tab edits
+`app/settings/settings.js` lists the settings the Settings tab edits
 (`SETTINGS_FIELDS`: element, type, OpenMC default, run modes it applies to).
 Values are stored as `scene.settings.values` keyed by element name, or
 `element.child` for compound elements (`cutoff`, `output`, `keff_trigger`,
@@ -159,7 +159,7 @@ field and the 394 ICSBEP `settings.xml` files.
   `order: "zyx"` for this; builder nodes default to `"xyz"`. A 9-value
   `rotation` is `M` itself (row-major) and is converted to angles on import.
   `js-tests/openmc-core.test.mjs` checks the matrix, and
-  `examples/openmc/locate.js` implements point location literally as the C++
+  `app/openmc/locate.js` implements point location literally as the C++
   does, which the tests compare against the mesh evaluator.
 - **Torus coefficients** (`src/surface.cpp`, missing from the docs):
   `x0 y0 z0 A B C`, with major radius `A`, half-width `B` along the axis, and
