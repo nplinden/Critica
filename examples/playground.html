@@ -9,15 +9,15 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&display=swap">
 <script>
   try {
-    document.documentElement.dataset.theme = localStorage.getItem("critica.theme") || "dark";
+    document.documentElement.dataset.theme = localStorage.getItem("critica.theme") || "light";
   } catch {
-    document.documentElement.dataset.theme = "dark";
+    document.documentElement.dataset.theme = "light";
   }
 </script>
 <style>
   :root {
     --font-ui: "Ubuntu", system-ui, -apple-system, sans-serif; --bg: #14161a; --panel: #1c1f25; --line: #2c313a; --text: #d8dce3; --muted: #8a919e; --accent: #6cb6ff; --err: #ff7b72; --on-accent: #0b1220; color-scheme: dark; }
-  /* Same theme preference as the builder (Settings → Appearance). */
+  /* Same theme preference as the builder (Preferences → Appearance). */
   :root[data-theme="light"] { --bg: #f3f4f6; --panel: #ffffff; --line: #dfe3e8; --text: #1f2328; --muted: #5d6876; --accent: #0969da; --err: #cf222e; --on-accent: #ffffff; color-scheme: light; }
   @media (prefers-color-scheme: light) { :root[data-theme="system"] { --bg: #f3f4f6; --panel: #ffffff; --line: #dfe3e8; --text: #1f2328; --muted: #5d6876; --accent: #0969da; --err: #cf222e; --on-accent: #ffffff; color-scheme: light; } }
   * { box-sizing: border-box; }

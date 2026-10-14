@@ -3,7 +3,7 @@
 #   docker build -t critica .
 #   docker run -d --name critica -p 1948:1948 --restart unless-stopped critica
 #
-# Then open http://<server>:1948/ (redirects to the builder).
+# Then open http://<server>:1948/.
 
 # ---- 1. Build the WebAssembly module ------------------------------------------
 # WebAssembly is architecture-independent, so this stage always runs natively on
@@ -23,9 +23,9 @@ RUN cargo build --release --target wasm32-unknown-unknown \
 FROM nginxinc/nginx-unprivileged:1.27-alpine
 
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --chown=nginx:nginx examples /usr/share/nginx/html/examples
+COPY --chown=nginx:nginx examples /usr/share/nginx/html
 COPY --chown=nginx:nginx pkg/critica.js pkg/critica.d.ts /usr/share/nginx/html/pkg/
 COPY --from=build --chown=nginx:nginx /src/critica.wasm /usr/share/nginx/html/pkg/critica.wasm
 
 EXPOSE 1948
-HEALTHCHECK --interval=30s --timeout=3s CMD wget -q -O /dev/null http://127.0.0.1:1948/examples/ || exit 1
+HEALTHCHECK --interval=30s --timeout=3s CMD wget -q -O /dev/null http://127.0.0.1:1948/ || exit 1

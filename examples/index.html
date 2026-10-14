@@ -8,11 +8,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&display=swap">
 <script>
-  // Theme preference (Settings → Appearance): "dark" (default), "light" or "system".
+  // Theme preference (Preferences → Appearance): "light" (default), "dark" or "system".
   try {
-    document.documentElement.dataset.theme = localStorage.getItem("critica.theme") || "dark";
+    document.documentElement.dataset.theme = localStorage.getItem("critica.theme") || "light";
   } catch {
-    document.documentElement.dataset.theme = "dark";
+    document.documentElement.dataset.theme = "light";
   }
 </script>
 <style>

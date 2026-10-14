@@ -284,7 +284,7 @@ against OpenMC's source, and the extension points planned for lattices.
 ### Script playground
 
 `examples/playground.html` (not linked from the builder; open it directly at
-`/examples/playground.html`) is a live editor. You write JS against `geo`,
+`/playground.html`) is a live editor. You write JS against `geo`,
 return a solid, then orbit it in WebGL and download it as STL.
 
 ## Deployment
@@ -292,7 +292,8 @@ return a solid, then orbit it in WebGL and download it as STL.
 The app is static files (pages, JS modules and the wasm), so any web server
 works. The `Dockerfile` builds the wasm in a Rust stage and serves everything
 with an unprivileged nginx (`deploy/nginx.conf`: gzip, correct
-`application/wasm` type, revalidating caches, `/` → `/examples/`).
+`application/wasm` type, revalidating caches; the app at `/`, the engine at
+`/pkg/`, old `/examples/…` links redirected).
 
 ```sh
 docker build -t critica .

@@ -1,11 +1,12 @@
-// Minimal static server for the playground: serves the repo root so the
-// page can import ../pkg/critica.js. Usage: node examples/serve.mjs [port]
+// Minimal static server: the app (examples/) at the site root and the engine
+// (pkg/) at /pkg/, where the pages' relative ../pkg/ imports resolve.
+// Usage: node examples/serve.mjs [port]
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const root = fileURLToPath(new URL("..", import.meta.url));
+const repo = fileURLToPath(new URL("..", import.meta.url));
 const port = Number(process.argv[2] ?? 1948);
 const types = {
   ".html": "text/html; charset=utf-8",
@@ -17,8 +18,9 @@ const types = {
 
 createServer(async (req, res) => {
   const path = decodeURIComponent(new URL(req.url, "http://x").pathname);
-  // Redirect so relative URLs in the pages resolve against /examples/.
-  if (path === "/") return res.writeHead(302, { location: "/examples/" }).end();
+  // Old links: the app used to live under /examples/.
+  if (path === "/examples" || path.startsWith("/examples/")) return res.writeHead(301, { location: path.slice("/examples".length) || "/" }).end();
+  const root = join(repo, path.startsWith("/pkg/") ? "" : "examples");
   const file = normalize(join(root, path.endsWith("/") ? `${path}index.html` : path));
   if (!file.startsWith(root)) return res.writeHead(403).end();
   try {

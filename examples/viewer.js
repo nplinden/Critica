@@ -126,8 +126,8 @@ const THEMES = {
   light: { background: [0.925, 0.933, 0.945], gridMinor: [0.78, 0.8, 0.83] },
 };
 
-export function createViewer(canvas, { onPick, onContext, theme: initialTheme = "dark", grid = true } = {}) {
-  let theme = THEMES[initialTheme] ?? THEMES.dark;
+export function createViewer(canvas, { onPick, onContext, theme: initialTheme = "light", grid = true } = {}) {
+  let theme = THEMES[initialTheme] ?? THEMES.light;
   const gl = canvas.getContext("webgl2", { antialias: true });
   if (!gl) throw new Error("WebGL2 is not available in this browser");
 

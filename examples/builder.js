@@ -162,7 +162,7 @@ const evalService = createEvalService({ onUpdate: (res) => applyResults(res), st
 // ---- theme (a viewer preference: browser storage, not part of the scene) ----
 const THEME_KEY = "critica.theme";
 const systemLight = window.matchMedia("(prefers-color-scheme: light)");
-let themePref = document.documentElement.dataset.theme || "dark"; // set early by index.html
+let themePref = document.documentElement.dataset.theme || "light"; // set early by index.html
 const effectiveTheme = () => (themePref === "system" ? (systemLight.matches ? "light" : "dark") : themePref);
 
 const viewer = createViewer($("canvas"), { onPick, onContext: onViewContext, theme: effectiveTheme() });
