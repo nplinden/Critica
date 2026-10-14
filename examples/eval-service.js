@@ -5,7 +5,8 @@
 // "lane" runs the same jobs in chunks between frames.
 //
 //   const service = createEvalService({ onUpdate(results) {} });
-//   service.run(scene, { focus, surfaces });   // results arrive via onUpdate
+//   service.run(scene, { focus, surfaces, skip });   // results arrive via onUpdate
+//   (skip: ids of top-level items not to build, e.g. hidden void cells)
 //
 // results: { parts: Map<id, [part data]>, solids: Map<id, part data> (focus
 // nodes), errors: Map<id, message>, surfaces: Map<key, mesh|null>, world,
@@ -94,9 +95,10 @@ export function createEvalService({ onUpdate, workers = defaultWorkers() } = {})
 
   function run(scene, options = {}) {
     lastRun = { scene, options };
-    const { focus = [], surfaces = [] } = options;
+    const { focus = [], surfaces = [], skip = [] } = options;
     gen++;
-    const items = scene.roots.filter((n) => n.enabled).map((n) => n.id);
+    const skipped = new Set(skip);
+    const items = scene.roots.filter((n) => n.enabled && !skipped.has(n.id)).map((n) => n.id);
     assign([...items, ...scene.universes.map((u) => u.id)]);
     const top = (id) => scene.ancestors(id).at(-1) ?? id;
     const json = scene.toJSON();

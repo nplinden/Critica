@@ -323,7 +323,10 @@ function refresh({ props = true, fit = false } = {}) {
   displayed = displayedSurfaces();
   const curved = displayed.map((d, i) => ({ key: d.key, surface: d.surface, tag: SURFACE_TAG + i })).filter((d) => !isPlane(d.surface.type));
   pendingUI = { fit: pendingUI.fit || fit, props: pendingUI.props || props };
-  evalService.run(scene, { focus: selection, surfaces: curved });
+  // Hidden void cells are not built (they are often the large "outside"
+  // regions): only when View → Void is on, or when selected (ghost, result).
+  const skip = showVoid ? [] : scene.roots.filter((n) => isVoidCell(n) && !selection.includes(n.id)).map((n) => n.id);
+  evalService.run(scene, { focus: selection, surfaces: curved, skip });
   viewer.setUp(scene.world.up);
   renderTree();
   if (props) renderProps();

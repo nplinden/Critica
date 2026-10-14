@@ -141,7 +141,9 @@ npm run demo    # builder at http://localhost:1948/
 - Keyboard: <kbd>Ctrl+Z</kbd>/<kbd>Ctrl+Y</kbd> undo/redo, <kbd>Del</kbd>
   delete, <kbd>Ctrl+D</kbd> duplicate, <kbd>U</kbd>/<kbd>S</kbd>/<kbd>N</kbd>/<kbd>C</kbd>
   (union/subtract/intersect/complement), <kbd>F</kbd> fit,
-  <kbd>I</kbd> isolate, <kbd>X</kbd> x-ray, <kbd>V</kbd> show void cells,
+  <kbd>I</kbd> isolate, <kbd>X</kbd> x-ray, <kbd>V</kbd> show void cells (hidden
+  void cells are not even built, which saves about 30% on typical OpenMC
+  models; a selected one is),
   <kbd>W</kbd> show the world box as a wireframe (*World*; black, light grey
   on the dark theme),
   <kbd>M</kbd> color by material (with a legend) instead of by cell.
