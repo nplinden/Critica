@@ -2,12 +2,11 @@
 // Scenes can mix builder shapes with OpenMC-style cells, half-spaces and
 // universes, and round-trip through OpenMC geometry/model XML.
 
-import { init } from "../pkg/critica.js";
+import { createEvalService } from "./eval-service.js";
 import { h, keepFocus } from "./ui.js";
 import { createViewer } from "./viewer.js";
 import {
   Scene,
-  Evaluator,
   PRIMITIVES,
   OPERATIONS,
   isOperation,
@@ -154,9 +153,10 @@ const isVoidCell = (n) => isCell(n) && n.fill.type === "material" && String(n.fi
 
 // ---- state -------------------------------------------------------------------
 
-const geo = await init();
-const evaluator = new Evaluator(geo);
-const meshCache = new WeakMap(); // Solid -> mesh
+// Created before the first refresh; replies are applied once the page module has loaded.
+// `?workers=N` sets the number of workers (0: evaluate in the page).
+const workersParam = new URLSearchParams(location.search).get("workers");
+const evalService = createEvalService({ onUpdate: (res) => applyResults(res), ...(workersParam !== null ? { workers: Number(workersParam) } : {}) });
 // ---- theme (a viewer preference: browser storage, not part of the scene) ----
 const THEME_KEY = "critica.theme";
 const systemLight = window.matchMedia("(prefers-color-scheme: light)");
@@ -193,7 +193,7 @@ const shownSurfaces = new Set();
 const SURFACE_TAG = 1 << 23; // pick tags from here on are displayed surfaces
 let lastMesh = null; // the mesh on screen, for ray picks
 let displayed = []; // surfaces drawn this frame: [{ key, owner, surface }], tag = SURFACE_TAG + index
-let results = { parts: new Map(), solids: new Map(), values: new Map(), errors: new Map(), world: null };
+let results = { parts: new Map(), solids: new Map(), errors: new Map(), surfaces: new Map(), world: null, live: 0 };
 let nodeById = new Map();
 let isolate = false;
 let xray = true;
@@ -307,57 +307,24 @@ function schedule({ props = false } = {}) {
     });
 }
 
-// Building a large scene runs item by item across frames (see Evaluator.run's
-// deadline): each frame builds for about BUILD_BUDGET_MS, draws what is ready
-// and continues on the next one, so the page never freezes for the whole build.
-const BUILD_BUDGET_MS = 40;
-let building = null; // { fit, props } owed once a progressive build completes
-let buildFrame = 0;
-let lastPartialDraw = 0; // partial states are drawn at most every PARTIAL_DRAW_MS
+// The geometry is built off the page by evaluation workers (eval-service.js),
+// in parallel and item by item: refresh() sends the scene and renders what
+// does not depend on the geometry; applyResults() draws each reply, partial
+// ones while a build is under way (at most every PARTIAL_DRAW_MS) and the
+// final one with framing, properties and error reporting.
+let pendingUI = { fit: false, props: false }; // owed when the current build completes
+let lastPartialDraw = 0;
 const PARTIAL_DRAW_MS = 150;
 
-function refresh({ props = true, fit = false, resume = false } = {}) {
-  if (!resume) setMessage("");
-  cancelAnimationFrame(buildFrame);
+function refresh({ props = true, fit = false } = {}) {
+  setMessage("");
   nodeById = new Map();
   scene.walk((n) => nodeById.set(n.id, n));
-  try {
-    const t0 = performance.now();
-    displayed = displayedSurfaces();
-    const curved = displayed.map((d, i) => ({ key: d.key, surface: d.surface, tag: SURFACE_TAG + i })).filter((d) => !isPlane(d.surface.type));
-    results = evaluator.run(scene, { focus: selection, surfaces: curved, deadline: t0 + BUILD_BUDGET_MS });
-    lastEvalMs = performance.now() - t0;
-  } catch (e) {
-    // The evaluator disposed any stale solids, so drop the old results too.
-    results = { parts: new Map(), solids: new Map(), values: new Map(), errors: new Map(), world: null };
-    setMessage(`Evaluation failed: ${e.message ?? e}`, true);
-  }
-  if (results.partial) {
-    // Draw what is built, then continue; framing and the properties wait for the end.
-    building = { fit: fit || Boolean(building?.fit), props: props || Boolean(building?.props) };
-    setProgress(`Building geometry · ${results.done} / ${results.total}`);
-    if (performance.now() - lastPartialDraw > PARTIAL_DRAW_MS) {
-      viewer.setUp(scene.world.up);
-      renderViewport(false);
-      renderTree();
-      updateToolbar();
-      lastPartialDraw = performance.now();
-    }
-    buildFrame = requestAnimationFrame(() => refresh({ props: false, resume: true }));
-    return;
-  }
-  if (building) {
-    fit ||= building.fit;
-    props ||= building.props;
-    building = null;
-  }
-  setProgress(null);
-  if (results.errors.size) {
-    const [id, msg] = results.errors.entries().next().value;
-    setMessage(`⚠ ${results.errors.size} node${results.errors.size > 1 ? "s" : ""} failed — "${nodeById.get(id)?.name}": ${msg}`, true);
-  }
+  displayed = displayedSurfaces();
+  const curved = displayed.map((d, i) => ({ key: d.key, surface: d.surface, tag: SURFACE_TAG + i })).filter((d) => !isPlane(d.surface.type));
+  pendingUI = { fit: pendingUI.fit || fit, props: pendingUI.props || props };
+  evalService.run(scene, { focus: selection, surfaces: curved });
   viewer.setUp(scene.world.up);
-  renderViewport(fit);
   renderTree();
   if (props) renderProps();
   else updateInfo();
@@ -367,18 +334,38 @@ function refresh({ props = true, fit = false, resume = false } = {}) {
   if (activeTab === "settings") settingsUI.render();
 }
 
-function meshOf(solid) {
-  if (!solid || solid.isEmpty) return null;
-  let m = meshCache.get(solid);
-  if (!m) meshCache.set(solid, (m = solid.toMesh()));
-  return m;
+function applyResults(res) {
+  results = res;
+  lastEvalMs = res.ms;
+  if (res.partial) {
+    setProgress(`Building geometry · ${res.done} / ${res.total}`);
+    if (performance.now() - lastPartialDraw > PARTIAL_DRAW_MS) {
+      renderViewport(false);
+      renderTree();
+      lastPartialDraw = performance.now();
+    }
+    return;
+  }
+  const { fit, props } = pendingUI;
+  pendingUI = { fit: false, props: false };
+  setProgress(null);
+  if (res.fatal) setMessage(`Evaluation failed: ${res.fatal}`, true);
+  else if (res.errors.size) {
+    const [id, msg] = res.errors.entries().next().value;
+    setMessage(`⚠ ${res.errors.size} node${res.errors.size > 1 ? "s" : ""} failed — "${nodeById.get(id)?.name}": ${msg}`, true);
+  }
+  renderViewport(fit);
+  renderTree();
+  if (props) renderProps();
+  else updateInfo();
+  updateToolbar();
 }
 
-/** Parts to draw for a node: cells/roots/universes have parts, other nodes a single solid. */
+/** Parts to draw for a node (plain data with meshes): top-level items and universes have parts, selected nodes a single one. */
 function partsOf(id) {
   if (results.parts.has(id)) return results.parts.get(id);
   const s = results.solids.get(id);
-  return s ? [{ solid: s }] : [];
+  return s ? [s] : [];
 }
 
 /** Ids whose faces get highlighted: tags under the selected nodes. */
@@ -740,12 +727,11 @@ function renderViewport(fit) {
   for (const id of visibleIds) {
     if (asPlane.has(id)) continue;
     for (const p of partsOf(id).filter(keep)) {
-      const m = meshOf(p.solid);
+      const m = p.mesh;
       if (!m) continue;
       meshes.push(m);
       openFlags.push(openSides(m, openDirections(id, p.tag)));
-      const src = p.source && meshOf(p.source);
-      leafTags.push(src && src.tags.length === m.tags.length ? src.tags : m.tags);
+      leafTags.push(p.leaves ?? m.tags);
     }
   }
   const mesh = mergeMeshes(meshes);
@@ -808,7 +794,7 @@ function renderViewport(fit) {
       marks.push(...sideMarks(d.surface, samples, (frame.half * 2) / 5, tag));
       return;
     }
-    const m = meshOf(results.surfaces?.get(d.key));
+    const m = results.surfaces?.get(d.key) ?? null;
     if (!m) return;
     const onBox = openSides(m, [0, 1, 2].map(() => [true, true]));
     const indices = [];
@@ -822,7 +808,7 @@ function renderViewport(fit) {
   viewer.setGizmos({ planes, arrows, surfaces, marks, wires });
   // Fit should frame the sheets and shells too.
   const sheetPoints = [...planes.flatMap((p) => p.polygon), ...shellPoints];
-  const ghostMeshes = ghostIds.flatMap((id) => partsOf(id).map((p) => meshOf(p.solid))).filter(Boolean);
+  const ghostMeshes = ghostIds.flatMap((id) => partsOf(id).map((p) => p.mesh)).filter(Boolean);
   viewer.setGhost(ghostMeshes.length ? mergeMeshes(ghostMeshes) : null);
 
   sceneBounds = contentBounds ?? (sheetPoints.length ? null : results.world);
@@ -836,7 +822,7 @@ function renderViewport(fit) {
   }
   if (fit) viewer.fit(sceneBounds ?? { min: [-1, -1, -1], max: [1, 1, 1] });
 
-  $("stats").textContent = `${mesh.indices.length / 3} tris · ${lastEvalMs.toFixed(1)} ms · ${geo.liveCount} solids`;
+  $("stats").textContent = `${mesh.indices.length / 3} tris · ${lastEvalMs.toFixed(1)} ms · ${results.live ?? 0} solids · ${evalService.workers || "no"} worker${evalService.workers === 1 ? "" : "s"}`;
 }
 
 function setMessage(text, error = false) {
@@ -1149,7 +1135,7 @@ function treeRow(node, depth, parent, index) {
   }
   const parts = results.parts.get(node.id);
   const solid = results.solids.get(node.id);
-  const tris = parts ? parts.reduce((s, p) => s + p.solid.triangleCount, 0) : solid?.triangleCount;
+  const tris = parts ? parts.reduce((s, p) => s + p.triangles, 0) : solid?.triangles;
   const error = results.errors.get(node.id);
   const tip = error ?? (tris != null ? `${tris} triangles` : node.enabled ? "" : "disabled");
   let iconColor = null;
@@ -1952,13 +1938,13 @@ function updateInfo() {
     info.textContent = `Error: ${results.errors.get(node.id)}`;
     return;
   }
-  const solids = partsOf(node.id).map((p) => p.solid);
+  const solids = partsOf(node.id).filter((p) => p.bounds);
   if (!solids.length) {
     info.textContent = isCell(node) && isVoidCell(node) ? "Void cell." : "Empty result.";
     return;
   }
   const volume = solids.reduce((s, x) => s + x.volume, 0);
-  const tris = solids.reduce((s, x) => s + x.triangleCount, 0);
+  const tris = solids.reduce((s, x) => s + x.triangles, 0);
   const bounds = solids.map((s) => s.bounds).reduce((a, b) => ({ min: a.min.map((v, i) => Math.min(v, b.min[i])), max: a.max.map((v, i) => Math.max(v, b.max[i])) }));
   const size = bounds.max.map((v, i) => fmt(v - bounds.min[i])).join(" × ");
   info.replaceChildren(

@@ -917,6 +917,8 @@ export class Evaluator {
    *  values  Map<node id, Value>
    *  errors  Map<node id, string>
    *  world   the resolved world box
+   *  (options: `focus` ids to materialize, `surfaces` to shell, `deadline`
+   *  for a partial run, `only` a Set of top-level ids to build)
    *  partial  true when `deadline` stopped the run early: only the first
    *          `done` of `total` top-level items are in `parts`; run again to
    *          continue (built solids stay cached, so nothing is redone)
@@ -927,11 +929,12 @@ export class Evaluator {
    * same solid with its leaf tags, when the part's faces were re-tagged). Solids are owned by the
    * evaluator: do not dispose them.
    */
-  run(scene, { focus = [], surfaces = [], deadline = Infinity } = {}) {
+  run(scene, { focus = [], surfaces = [], deadline = Infinity, only = null } = {}) {
     this.scene = scene;
     this.used = new Map();
     const world = scene.resolveWorld();
-    const items = scene.roots.filter((n) => n.enabled);
+    // `only`: the ids of the top-level items to build (a worker's share).
+    const items = scene.roots.filter((n) => n.enabled && (!only || only.has(n.id)));
     const out = { parts: new Map(), solids: new Map(), values: new Map(), errors: new Map(), world, surfaces: new Map(), partial: false, done: 0, total: items.length };
     this.out = out;
     const ctx = this.#ctx(world, []);

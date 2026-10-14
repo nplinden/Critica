@@ -345,13 +345,18 @@ from Google Fonts.
   shared by neighbouring cells still match, and the annulus generator stitches
   rings of different counts. Another 1.5× on the ICSBEP models (32% fewer
   triangles); turn it off with *Preferences → Adaptive*.
-- **Progressive builds**: the evaluator takes a deadline and builds the scene
-  one top-level item (cell) at a time; when the budget (40 ms per frame) runs
-  out it returns a partial result, keeps everything built so far cached, and
-  the builder draws it and continues on the next frame, with
-  "Building geometry · n / m" in the status line. A large scene appears cell
-  by cell instead of freezing the page; the longest pause is the slowest
-  single cell.
+- **Workers**: the geometry is built off the page, in parallel, by up to four
+  Web Workers (`eval-worker.js`, one fewer than the CPU cores), each with its
+  own CSG engine and evaluator. Each top-level item (cell) is given to the
+  least-loaded worker and stays there, so edits hit a warm cache; workers
+  build in chunks and stream meshes back as items finish, so the scene appears
+  cell by cell and the page never freezes. Meshes cross once per result
+  (transferred, not copied); later replies repeat only their keys, and
+  workers say which meshes the page may drop. `eval-service.js` merges the
+  replies and supersedes stale jobs after an edit. Without module workers
+  (or with `?workers=0`), the same jobs run in the page between frames.
+  heu-met-fast-014: built in 0.3 s instead of 0.9 s, with no frame longer
+  than ~17 ms.
 - **Robustness**: planes come from Newell's method; degenerate polygons and
   repeated vertices are dropped. A bounding-box check short-circuits booleans
   on disjoint operands. Mirroring transforms reverse winding so solids stay
