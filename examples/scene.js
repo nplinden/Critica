@@ -822,6 +822,67 @@ export function completeBox(box) {
 
 // A region value is { key, solid, inverted }: `inverted` means "everything
 // except `solid`", so complements stay cheap until they must be displayed.
+// ---- analytic forms of half-space solids (for the nested fast path) ----
+
+/**
+ * The box an axis-aligned plane side occupies in the world (the solid
+ * #planeSide builds), with the tag of the face the plane makes:
+ * { kind: "box", min, max, tags: [[lowTag, highTag] per axis] }. Null for
+ * oblique planes.
+ */
+function planeBoxForm({ n, d }, neg, world, tag) {
+  const len = Math.hypot(...n);
+  if (!(len > 0)) return null;
+  const u = n.map((v) => v / len);
+  const axis = u.findIndex((v) => Math.abs(Math.abs(v) - 1) < 1e-12);
+  if (axis < 0) return null;
+  const x0 = (d / len) * Math.sign(u[axis]);
+  const lower = neg === u[axis] > 0;
+  const min = [...world.min];
+  const max = [...world.max];
+  const tags = [[], [], []];
+  if (lower) {
+    max[axis] = Math.min(world.max[axis], x0);
+    tags[axis][1] = tag;
+  } else {
+    min[axis] = Math.max(world.min[axis], x0);
+    tags[axis][0] = tag;
+  }
+  return { kind: "box", min, max, tags };
+}
+
+/**
+ * The interior solid #interior builds for a sphere or an axis cylinder:
+ * { kind: "sphere", center, r, tag } or { kind: "cylinder", axis, center
+ * (the two other coordinates), r, lo, hi (the world's extent), tag }.
+ */
+function interiorForm(s, world, tag) {
+  const c = s.coeffs;
+  if (s.type === "sphere") return { kind: "sphere", center: c.slice(0, 3), r: c[3], tag };
+  if (s.type === "x-cylinder" || s.type === "y-cylinder" || s.type === "z-cylinder") {
+    const axis = axisOf(s.type);
+    return { kind: "cylinder", axis, center: [c[0], c[1]], r: c[2], lo: world.min[axis], hi: world.max[axis], tag };
+  }
+  return null;
+}
+
+/**
+ * Whether the tessellated sphere `a` lies strictly inside the tessellated
+ * sphere `b`. Concentric spheres with the same tessellation are scaled copies
+ * of each other, so a smaller radius is enough; otherwise `a` must clear the
+ * facets of `b`, which sit up to (1 − cos²(π/segments))·r inside its sphere.
+ */
+function sphereWithin(a, b, segments) {
+  const d = Math.hypot(...a.center.map((v, i) => v - b.center[i]));
+  const eps = 1e-12 * Math.max(1, b.r);
+  if (d <= eps) return a.r < b.r - eps;
+  const facet = Math.cos(Math.PI / segments) ** 2;
+  return d + a.r < b.r * facet - eps;
+}
+
+/** Whether two spheres (and so their inscribed tessellations) are strictly apart. */
+const spheresApart = (a, b) => Math.hypot(...a.center.map((v, i) => v - b.center[i])) > a.r + b.r;
+
 const EMPTY = Object.freeze({ key: "∅", solid: null, inverted: false });
 const FULL = Object.freeze({ key: "𝕌", solid: null, inverted: true });
 
@@ -836,8 +897,10 @@ const flip = (v) => (v.solid ? { ...v, key: `~${v.key}`, inverted: !v.inverted }
  * same local clip box share results. Solids not used in a pass are disposed.
  */
 export class Evaluator {
-  constructor(geo) {
+  /** `fastPaths: false` always uses the general booleans (for tests). */
+  constructor(geo, { fastPaths = true } = {}) {
     this.geo = geo;
+    this.fastPaths = fastPaths;
     this.cache = new Map();
     this.used = null;
     this.refDepth = 0;
@@ -908,8 +971,13 @@ export class Evaluator {
     return solid;
   }
 
+  /** Tessellation of curved surfaces (slices; spheres use half as many stacks). */
+  get segments() {
+    return Math.max(8, Math.round(this.scene.world.segments ?? 48));
+  }
+
   #ctx(world, stack) {
-    const segments = Math.max(8, Math.round(this.scene.world.segments ?? 48));
+    const segments = this.segments;
     return { world, stack, segments, key: boxKey(world) + segments };
   }
 
@@ -1071,10 +1139,104 @@ export class Evaluator {
       const u = this.#setOp("union", N.map((v) => v.solid), N.map((v) => v.key));
       return { ...u, inverted: true };
     }
+    const nested = this.#nestedIntersect(P, N);
+    if (nested) return nested;
     const p = this.#setOp("intersect", P.map((v) => v.solid), P.map((v) => v.key));
     if (!N.length) return { ...p, inverted: false };
     const key = `sub(${p.key};${N.map((v) => v.key).join(",")})`;
     return { key, solid: this.#memo(key, () => p.solid.subtract(...N.map((v) => v.solid))), inverted: false };
+  }
+
+  /**
+   * ∩P − ∪N with fewer (or no) booleans where boundaries cannot cross, from
+   * the analytic forms of the operands; null when nothing applies (the caller
+   * then uses the general BSP path, quadratic in the polygon count):
+   * - spheres: nested P spheres reduce to the innermost; N spheres strictly
+   *   inside it and apart from each other are merged in inverted (a shell is
+   *   the outer sphere plus the inner one turned inside out);
+   * - coaxial cylinders and axis boxes (planes): an annulus between the
+   *   largest N and the smallest P cylinder, cut along the axis by the boxes,
+   *   generated directly with the cylinders' own ring vertices.
+   * The other operands are then applied with the general booleans. A merged
+   * shell is only used when they are all subtractions (a channel through
+   * it): other P operands, such as a plane cutting the shell, are cheaper to
+   * apply to the outer sphere first, as the general path does, because the
+   * BSP is quadratic in the polygon count and a cut halves it.
+   */
+  #nestedIntersect(P, N) {
+    if (!this.fastPaths || !P.length) return null;
+    const segs = this.segments;
+    const kind = (v) => v.form?.kind;
+    const keyOf = (ps, ns) => `nest(${ps.map((v) => v.key).join(",")};${ns.map((v) => v.key).join(",")})`;
+    const rest = (used) => [...P, ...N].filter((v) => !used.includes(v));
+    /** The fast part, then the rest through #intersect (general: the part has no form). */
+    const finish = (part, used) => {
+      const others = rest(used);
+      return others.length ? this.#intersect([part, ...others]) : part;
+    };
+
+    // Spheres.
+    const sphereP = P.filter((v) => kind(v) === "sphere");
+    if (sphereP.length) {
+      const inner = sphereP.find((a) => sphereP.every((b) => b === a || sphereWithin(a.form, b.form, segs)));
+      const otherP = P.filter((v) => kind(v) !== "sphere");
+      if (inner && !otherP.length) {
+        const holes = [];
+        for (const n of N) if (kind(n) === "sphere" && sphereWithin(n.form, inner.form, segs) && holes.every((h) => spheresApart(h.form, n.form))) holes.push(n);
+        if (holes.length || sphereP.length > 1 || rest([...sphereP]).length === 0) {
+          let part;
+          if (!holes.length) part = { key: inner.key, solid: inner.solid, inverted: false };
+          else {
+            const key = keyOf([inner], holes);
+            const solid = this.#memo(key, () => {
+              const inverted = holes.map((n) => n.solid.inverse());
+              const out = inner.solid.merge(...inverted);
+              inverted.forEach((x) => x.dispose());
+              return out;
+            });
+            part = { key, solid, inverted: false };
+          }
+          return finish(part, [...sphereP, ...holes]);
+        }
+      }
+    }
+
+    // Coaxial cylinders cut by axis boxes.
+    const firstCyl = P.find((v) => kind(v) === "cylinder");
+    if (!firstCyl) return null;
+    const { axis: k, center } = firstCyl.form;
+    const close = (a, b) => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
+    const coaxial = (v) => kind(v) === "cylinder" && v.form.axis === k && close(v.form.center[0], center[0]) && close(v.form.center[1], center[1]);
+    const cylP = P.filter(coaxial);
+    const cylN = N.filter(coaxial);
+    const outer = cylP.map((v) => v.form).reduce((a, b) => (b.r < a.r ? b : a));
+    const inner = cylN.map((v) => v.form).reduce((a, b) => (b.r > a.r ? b : a), { r: 0, tag: 0 });
+    const [i, j] = [0, 1, 2].filter((a) => a !== k);
+    const [ci, cj] = center;
+    // Boxes holding the whole disk shorten the annulus; others stay as operands.
+    const boxes = P.filter((v) => kind(v) === "box" && v.form.min[i] <= ci - outer.r && v.form.max[i] >= ci + outer.r && v.form.min[j] <= cj - outer.r && v.form.max[j] >= cj + outer.r);
+    if (cylP.length + cylN.length + boxes.length < 2) return null; // a lone cylinder: nothing to save
+    if (!(inner.r < outer.r)) return EMPTY;
+    let [z0, tag0, z1, tag1] = [outer.lo, outer.tag, outer.hi, outer.tag];
+    for (const { form: b } of boxes) {
+      if (b.min[k] > z0) [z0, tag0] = [b.min[k], b.tags[k][0] ?? outer.tag];
+      if (b.max[k] < z1) [z1, tag1] = [b.max[k], b.tags[k][1] ?? outer.tag];
+    }
+    if (!(z1 > z0)) return EMPTY;
+    const at = (z) => {
+      const p = [0, 0, 0];
+      p[k] = z;
+      p[i] = ci;
+      p[j] = cj;
+      return p;
+    };
+    const used = [...cylP, ...cylN, ...boxes];
+    const key = keyOf([...cylP, ...boxes], cylN);
+    const solid = this.#memo(key, () =>
+      this.geo.tube({ start: at(z0), end: at(z1), innerRadius: inner.r, radius: outer.r, slices: segs, tags: { outer: outer.tag, inner: inner.tag, start: tag0, end: tag1 } }),
+    );
+    if (solid.isEmpty) return EMPTY;
+    return finish({ key, solid, inverted: false }, used);
   }
 
   /** ∪P ∪ ∪~Nᵢ = ~(∩Nᵢ − ∪P). */
@@ -1203,7 +1365,7 @@ export class Evaluator {
     }
     if (plane) {
       const solid = this.#memo(key, () => this.#planeSide(plane, neg, ctx, tag));
-      return solid ? { key, solid, inverted: false } : EMPTY;
+      return solid ? { key, solid, inverted: false, form: planeBoxForm(plane, neg, ctx.world, tag) } : EMPTY;
     }
 
     // Closed or tubular surfaces: build the interior; the positive side is its complement.
@@ -1215,7 +1377,7 @@ export class Evaluator {
     }
     const solid = this.#memo(key, () => this.#interior(surface, shape, ctx, tag));
     if (!solid) return neg === interiorIsNegative ? EMPTY : FULL;
-    return { key, solid, inverted: neg !== interiorIsNegative };
+    return { key, solid, inverted: neg !== interiorIsNegative, form: interiorForm(surface, ctx.world, tag) };
   }
 
   #planeSide({ n, d }, neg, ctx, tag) {

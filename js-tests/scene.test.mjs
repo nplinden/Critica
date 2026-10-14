@@ -321,3 +321,51 @@ test("a duplicated half-space region gets its own surfaces", () => {
   s.surfaces.get(h1.params.surface).coeffs[0] = 5;
   assert.equal(s.surfaces.get(a.params.surface).coeffs[0], 1);
 });
+
+test("nested fast path: same solids as the general booleans, far fewer operations", () => {
+  const build = (regions, surfaces) => {
+    const s = new Scene();
+    s.world = { ...s.world, auto: false, min: [-20, -20, -20], max: [20, 20, 20], segments: 32 };
+    for (const sf of surfaces) s.addSurface(sf);
+    const cells = regions.map((halves) => {
+      const cell = s.add("cell");
+      const and = s.add("intersect", {}, cell.id);
+      for (const [surface, sense] of halves) s.add("halfspace", { params: { surface, sense } }, and.id);
+      return cell;
+    });
+    return { s, cells };
+  };
+  const compare = (regions, surfaces) => {
+    const { s, cells } = build(regions, surfaces);
+    const vol = (fast) => {
+      const ev = new Evaluator(geo, { fastPaths: fast });
+      const out = ev.run(s);
+      const v = cells.map((c) => (out.parts.get(c.id) ?? []).reduce((a, p) => a + p.solid.volume, 0));
+      ev.dispose();
+      return v;
+    };
+    const [fast, slow] = [vol(true), vol(false)];
+    fast.forEach((v, i) => close(v, slow[i], 1e-6 * Math.max(1, slow[i])));
+    return fast;
+  };
+  const spheres = [{ type: "sphere", coeffs: [0, 0, 0, 3] }, { type: "sphere", coeffs: [0, 0, 0, 5] }, { type: "sphere", coeffs: [0, 0, 0, 9] }];
+  // Concentric shells (Godiva-like): merged, not subtracted.
+  const v = compare([[[1, "-"]], [[1, "+"], [2, "-"]], [[2, "+"], [3, "-"]]], spheres);
+  assert.ok(v[1] > 0 && v[2] > 0);
+  // Coaxial annulus cut by planes, with a sphere subtracted afterwards (partial).
+  compare([[[1, "+"], [2, "-"], [3, "+"], [4, "-"]], [[1, "+"], [2, "-"], [3, "+"], [4, "-"], [5, "+"]]], [
+    { type: "z-cylinder", coeffs: [0, 0, 2] },
+    { type: "z-cylinder", coeffs: [0, 0, 6] },
+    { type: "z-plane", coeffs: [-4] },
+    { type: "z-plane", coeffs: [7] },
+    { type: "sphere", coeffs: [0, 0, 7, 3] },
+  ]);
+  // Off-centre spheres whose facets could cross: must fall back, still exact.
+  compare([[[1, "+"], [2, "-"]], [[3, "+"], [2, "-"]]], [
+    { type: "sphere", coeffs: [0.05, 0, 0, 4.9] },
+    { type: "sphere", coeffs: [0, 0, 0, 5] },
+    { type: "sphere", coeffs: [1, 0, 0, 1] },
+  ]);
+  // A shell with a channel through it (partial: merged shell, then the channel).
+  compare([[[1, "+"], [2, "-"], [3, "+"]]], [...spheres.slice(0, 2), { type: "y-cylinder", coeffs: [0, 0, 0.5] }]);
+});

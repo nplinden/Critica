@@ -421,6 +421,15 @@ impl Solid {
         }
     }
 
+    /// Both polygon sets, without any boolean: the caller guarantees the
+    /// boundaries do not cross (e.g. a shell from a sphere and a sphere
+    /// strictly inside it, the inner one inverted).
+    pub fn merge(&self, other: &Solid) -> Solid {
+        let mut polygons = self.polygons.clone();
+        polygons.extend(other.polygons.iter().cloned());
+        Solid { polygons }
+    }
+
     /// Turns the solid inside out.
     pub fn inverse(&self) -> Solid {
         let mut s = self.clone();

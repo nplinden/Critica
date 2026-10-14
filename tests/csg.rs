@@ -265,3 +265,16 @@ fn ffi_round_trip() {
     let c = ffi::geo_clone(a);
     assert_eq!(c, u);
 }
+
+#[test]
+fn tube_and_merge_match_booleans() {
+    use critica::primitives::{frustum, sphere, tube};
+    let (a, b) = (Vec3::new(0.0, 0.0, -2.0), Vec3::new(0.0, 0.0, 3.0));
+    let annulus = tube(a, b, 1.0, 2.0, 40, [1, 2, 3, 4]);
+    let boolean = frustum(a, b, 2.0, 2.0, 40).subtract(&frustum(a, b, 1.0, 1.0, 40));
+    assert!((annulus.volume() - boolean.volume()).abs() < 1e-9);
+    assert!((tube(a, b, 0.0, 2.0, 40, [0; 4]).volume() - frustum(a, b, 2.0, 2.0, 40).volume()).abs() < 1e-9);
+    let outer = sphere(Vec3::new(0.0, 0.0, 0.0), 2.0, 24, 12);
+    let inner = sphere(Vec3::new(0.0, 0.0, 0.0), 1.5, 24, 12);
+    assert!((outer.merge(&inner.inverse()).volume() - outer.subtract(&inner).volume()).abs() < 1e-9);
+}

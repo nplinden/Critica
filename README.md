@@ -329,6 +329,15 @@ from Google Fonts.
   traversal is a loop rather than recursion. Convex inputs degenerate into
   chains as deep as their polygon count, and a recursive version would
   overflow the wasm stack on high-resolution spheres.
+- **Nested surfaces**: booleans are quadratic in the polygon count on convex
+  operands, and most OpenMC models are nested shells. The evaluator keeps the
+  analytic form of each half-space (sphere, axis cylinder, axis box) and skips
+  booleans where boundaries cannot cross: a spherical shell is the outer
+  sphere merged with the inner one inverted, and a coaxial annulus cut by
+  planes is generated directly with the cylinders' own vertices (`geo.tube`,
+  `solid.merge`). Other operands are then applied with the general booleans.
+  On the 378 drawable ICSBEP models this makes the first evaluation 9.5×
+  faster (Godiva: 1.5 s → 7 ms), with the same solids.
 - **Robustness**: planes come from Newell's method; degenerate polygons and
   repeated vertices are dropped. A bounding-box check short-circuits booleans
   on disjoint operands. Mirroring transforms reverse winding so solids stay

@@ -150,6 +150,34 @@ pub extern "C" fn geo_cylinder(
     ))
 }
 
+/// Annular tube (plain cylinder when r_inner is 0), faces tagged per surface.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn geo_tube(
+    sx: f64,
+    sy: f64,
+    sz: f64,
+    ex: f64,
+    ey: f64,
+    ez: f64,
+    r_inner: f64,
+    r_outer: f64,
+    slices: u32,
+    tag_outer: u32,
+    tag_inner: u32,
+    tag_start: u32,
+    tag_end: u32,
+) -> u32 {
+    create(primitives::tube(
+        Vec3::new(sx, sy, sz),
+        Vec3::new(ex, ey, ez),
+        r_inner,
+        r_outer,
+        slices,
+        [tag_outer, tag_inner, tag_start, tag_end],
+    ))
+}
+
 #[no_mangle]
 pub extern "C" fn geo_torus(
     cx: f64,
@@ -197,6 +225,12 @@ pub extern "C" fn geo_subtract(a: u32, b: u32) -> u32 {
 #[no_mangle]
 pub extern "C" fn geo_intersect(a: u32, b: u32) -> u32 {
     combine(a, b, Solid::intersect)
+}
+
+/// Polygons of both solids, no boolean (boundaries must not cross).
+#[no_mangle]
+pub extern "C" fn geo_merge(a: u32, b: u32) -> u32 {
+    combine(a, b, Solid::merge)
 }
 
 #[no_mangle]

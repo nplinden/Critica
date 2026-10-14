@@ -103,6 +103,58 @@ pub fn frustum(start: Vec3, end: Vec3, r_start: f64, r_end: f64, slices: u32) ->
     Solid::from_polygons(polygons)
 }
 
+/// Annular tube between `start` and `end`: the space between radii `r_inner`
+/// and `r_outer` (a plain cylinder when `r_inner` is 0). Its rings use the
+/// same vertices as `frustum`, so it lines up with cylinders of the same axis
+/// and slices. Faces carry `tags`: [outer side, inner side, start cap, end cap].
+pub fn tube(start: Vec3, end: Vec3, r_inner: f64, r_outer: f64, slices: u32, tags: [u32; 4]) -> Solid {
+    let slices = slices.max(3);
+    let ray = end - start;
+    let height = ray.length();
+    if height <= 0.0 || r_outer <= 0.0 || r_inner >= r_outer {
+        return Solid::default();
+    }
+    let axis_z = ray / height;
+    let axis_x = axis_z.any_perpendicular();
+    let axis_y = axis_x.cross(axis_z).normalize();
+    let outward = |t: f64| {
+        let angle = t * TAU;
+        axis_x * angle.cos() + axis_y * angle.sin()
+    };
+    let [t_out, t_in, t_start, t_end] = tags;
+    let at = |stack: f64, t: f64, r: f64, normal: Vec3| Vertex::new(start + ray * stack + outward(t) * r, normal);
+    let hollow = r_inner > 0.0;
+    let mut polygons = Vec::with_capacity(slices as usize * 4);
+    for i in 0..slices {
+        let t0 = i as f64 / slices as f64;
+        let t1 = (i + 1) as f64 / slices as f64;
+        let (o0, o1) = (outward(t0), outward(t1));
+        polygons.extend(Polygon::new(
+            vec![at(0.0, t1, r_outer, o1), at(0.0, t0, r_outer, o0), at(1.0, t0, r_outer, o0), at(1.0, t1, r_outer, o1)],
+            t_out,
+        ));
+        let down = -axis_z;
+        if hollow {
+            polygons.extend(Polygon::new(
+                vec![at(0.0, t0, r_inner, -o0), at(0.0, t1, r_inner, -o1), at(1.0, t1, r_inner, -o1), at(1.0, t0, r_inner, -o0)],
+                t_in,
+            ));
+            polygons.extend(Polygon::new(
+                vec![at(0.0, t0, r_inner, down), at(0.0, t0, r_outer, down), at(0.0, t1, r_outer, down), at(0.0, t1, r_inner, down)],
+                t_start,
+            ));
+            polygons.extend(Polygon::new(
+                vec![at(1.0, t1, r_inner, axis_z), at(1.0, t1, r_outer, axis_z), at(1.0, t0, r_outer, axis_z), at(1.0, t0, r_inner, axis_z)],
+                t_end,
+            ));
+        } else {
+            polygons.extend(Polygon::new(vec![Vertex::new(start, down), at(0.0, t0, r_outer, down), at(0.0, t1, r_outer, down)], t_start));
+            polygons.extend(Polygon::new(vec![Vertex::new(end, axis_z), at(1.0, t1, r_outer, axis_z), at(1.0, t0, r_outer, axis_z)], t_end));
+        }
+    }
+    Solid::from_polygons(polygons)
+}
+
 /// Torus around the Y axis. `major` is the distance from the center to the
 /// tube center, `minor` the tube radius.
 pub fn torus(center: Vec3, major: f64, minor: f64, segments: u32, rings: u32) -> Solid {

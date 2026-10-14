@@ -113,6 +113,18 @@ export class Critica {
     );
   }
 
+  /**
+   * Annular tube between `start` and `end` (a plain cylinder when
+   * `innerRadius` is 0), with the ring vertices of `cylinder`. `tags` labels
+   * the faces: { outer, inner, start, end }.
+   */
+  tube({ start, end, innerRadius = 0, radius = 1, slices = 32, tags = {} } = {}) {
+    const s = vec3(start, [0, -1, 0]);
+    const e = vec3(end, [0, 1, 0]);
+    const t = (k) => (tags[k] ?? 0) >>> 0;
+    return this._wrap(this.#wasm.geo_tube(s[0], s[1], s[2], e[0], e[1], e[2], innerRadius, radius, slices, t("outer"), t("inner"), t("start"), t("end")));
+  }
+
   /** Cone with its base at `start` and apex at `end`. */
   cone({ start, end, radius = 1, slices = 32 } = {}) {
     return this.cylinder({ start, end, radius, radiusEnd: 0, slices });
@@ -201,6 +213,11 @@ export class Solid {
 
   intersect(...others) {
     return this.#binary(this.#w.geo_intersect, others);
+  }
+
+  /** All polygons of this and `others`, without booleans: only for boundaries that do not cross. */
+  merge(...others) {
+    return this.#binary(this.#w.geo_merge, others);
   }
 
   /** Swaps inside and outside. */
