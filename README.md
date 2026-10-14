@@ -359,6 +359,16 @@ from Google Fonts.
   (or with `?workers=0`), the same jobs run in the page between frames.
   heu-met-fast-014: built in 0.3 s instead of 0.9 s, with no frame longer
   than ~17 ms.
+- **Mesh cache**: each top-level item gets a key hashing everything its
+  geometry depends on (its subtree without display fields, the sources of its
+  references, the universes it fills, its surfaces, the world box, the
+  tessellation settings and a cache version: `item-keys.js`). Built items are
+  saved in IndexedDB under that key (`mesh-store.js`, least recently used
+  beyond 300 MB) and served from it, and from a recent-items memory, without
+  any worker: reopening an unchanged scene is instant (heu-met-fast-014:
+  geometry complete ~150 ms after a reload, nothing built), and an edit
+  rebuilds only the items it changes. *Preferences → Geometry cache* shows its
+  size and clears it.
 - **Robustness**: planes come from Newell's method; degenerate polygons and
   repeated vertices are dropped. A bounding-box check short-circuits booleans
   on disjoint operands. Mirroring transforms reverse winding so solids stay

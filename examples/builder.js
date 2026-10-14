@@ -3,6 +3,7 @@
 // universes, and round-trip through OpenMC geometry/model XML.
 
 import { createEvalService } from "./eval-service.js";
+import { openMeshStore } from "./mesh-store.js";
 import { h, keepFocus } from "./ui.js";
 import { createViewer } from "./viewer.js";
 import {
@@ -156,7 +157,8 @@ const isVoidCell = (n) => isCell(n) && n.fill.type === "material" && String(n.fi
 // Created before the first refresh; replies are applied once the page module has loaded.
 // `?workers=N` sets the number of workers (0: evaluate in the page).
 const workersParam = new URLSearchParams(location.search).get("workers");
-const evalService = createEvalService({ onUpdate: (res) => applyResults(res), ...(workersParam !== null ? { workers: Number(workersParam) } : {}) });
+// Built items are kept in IndexedDB, so an unchanged scene reloads without rebuilding.
+const evalService = createEvalService({ onUpdate: (res) => applyResults(res), store: openMeshStore(), ...(workersParam !== null ? { workers: Number(workersParam) } : {}) });
 // ---- theme (a viewer preference: browser storage, not part of the scene) ----
 const THEME_KEY = "critica.theme";
 const systemLight = window.matchMedia("(prefers-color-scheme: light)");
@@ -825,7 +827,7 @@ function renderViewport(fit) {
   }
   if (fit) viewer.fit(sceneBounds ?? { min: [-1, -1, -1], max: [1, 1, 1] });
 
-  $("stats").textContent = `${mesh.indices.length / 3} tris · ${lastEvalMs.toFixed(1)} ms · ${results.live ?? 0} solids · ${evalService.workers || "no"} worker${evalService.workers === 1 ? "" : "s"}`;
+  $("stats").textContent = `${mesh.indices.length / 3} tris · ${lastEvalMs.toFixed(1)} ms · ${results.live ?? 0} solids · ${evalService.workers || "no"} worker${evalService.workers === 1 ? "" : "s"}${results.cached ? ` · ${results.cached} cached` : ""}`;
 }
 
 function setMessage(text, error = false) {
@@ -1502,7 +1504,34 @@ function appearanceSettings() {
     title: "Triangles drawn, last evaluation time, and live CSG solids, in the viewport's bottom-right corner",
     onchange: (e) => setShowStats(e.target.checked),
   });
-  return h("div", { class: "section" }, h("h3", {}, "Appearance"), field("Theme", select), field("Statistics", stats, "Show performance statistics in the viewport"));
+  const store = evalService.store;
+  const cache = h(
+    "div",
+    { class: "color-field" },
+    h("span", { class: "oid" }, store ? `${(store.bytes / 2 ** 20).toFixed(1)} MB · ${store.entries} item${store.entries === 1 ? "" : "s"}` : "unavailable"),
+    store &&
+      h(
+        "button",
+        {
+          class: "tb",
+          title: "Forget the built geometry kept between sessions (it is rebuilt when needed)",
+          onclick: async () => {
+            await evalService.clearCache();
+            renderSettings();
+            setMessage("Geometry cache cleared.");
+          },
+        },
+        "Clear",
+      ),
+  );
+  return h(
+    "div",
+    { class: "section" },
+    h("h3", {}, "Appearance"),
+    field("Theme", select),
+    field("Statistics", stats, "Show performance statistics in the viewport"),
+    field("Geometry cache", cache, "Built geometry is kept in the browser, so reopening an unchanged scene is instant"),
+  );
 }
 
 // Viewport statistics (triangles · evaluation ms · live solids): a per-browser

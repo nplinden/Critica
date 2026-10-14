@@ -10,29 +10,47 @@
 //
 // results: { parts: Map<id, [part data]>, solids: Map<id, part data> (focus
 // nodes), errors: Map<id, message>, surfaces: Map<key, mesh|null>, world,
-// partial, done, total, live (solids in all engines), ms, fatal? }, with part
-// data as in eval-data.js (always with its mesh and leaves).
+// partial, done, total, live (solids in all engines), ms, cached (items served
+// from the mesh cache), fatal? }, with part data as in eval-data.js (always
+// with its mesh and leaves).
+//
+// With a `store` (mesh-store.js, or a promise of one), built items are saved
+// under their item key (item-keys.js) and served from it later: an unchanged
+// item is drawn at once, without a worker, across sessions. A recent-items
+// memory in front of it serves undo and redo without even a lookup.
 
 import { Scene } from "./scene.js";
 import { EvalRunner, runJob } from "./eval-data.js";
+import { itemKeys } from "./item-keys.js";
 
 const defaultWorkers = () => Math.max(1, Math.min(4, (globalThis.navigator?.hardwareConcurrency || 2) - 1));
 
-export function createEvalService({ onUpdate, workers = defaultWorkers() } = {}) {
+const MEMORY_ITEMS = 2000; // recently built or loaded items kept in memory
+
+export function createEvalService({ onUpdate, workers = defaultWorkers(), store = null } = {}) {
   const meshes = new Map(); // `${lane}:${key}` → { mesh, leaves }
+  const memory = new Map(); // item key → parts (insertion order = recency)
+  let storeReady = Promise.resolve(store).catch(() => null);
+  let meshStore = null;
+  storeReady.then((s) => (meshStore = s));
   const owner = new Map(); // top-level item (or universe) id → lane
   let lanes = [];
   let gen = 0;
   let job = null;
   let lastRun = null;
   let inline = false;
+  let unloading = false;
+  // Navigating away aborts the workers' module loads, which Firefox reports as
+  // (empty) worker errors, sometimes before pagehide: ignore those.
+  for (const ev of ["beforeunload", "pagehide"]) globalThis.addEventListener?.(ev, () => (unloading = true));
 
   function workerLane(i) {
     const worker = new Worker(new URL("./eval-worker.js", import.meta.url), { type: "module" });
     worker.onmessage = (e) => handle(i, e.data);
     worker.onerror = (e) => {
       e.preventDefault?.();
-      console.warn("Evaluation worker failed; evaluating in the page instead.", e.message ?? e);
+      if (unloading) return; // workers torn down with the page
+      console.warn(`Evaluation worker failed (${e.message ?? "error"} ${e.filename ?? ""}:${e.lineno ?? ""}); evaluating in the page instead.`);
       useInline();
     };
     return { post: (msg) => worker.postMessage(msg), terminate: () => worker.terminate(), live: 0 };
@@ -93,6 +111,12 @@ export function createEvalService({ onUpdate, workers = defaultWorkers() } = {})
     }
   }
 
+  function remember(key, parts) {
+    memory.delete(key);
+    memory.set(key, parts);
+    if (memory.size > MEMORY_ITEMS) memory.delete(memory.keys().next().value);
+  }
+
   function run(scene, options = {}) {
     lastRun = { scene, options };
     const { focus = [], surfaces = [], skip = [] } = options;
@@ -101,10 +125,48 @@ export function createEvalService({ onUpdate, workers = defaultWorkers() } = {})
     const items = scene.roots.filter((n) => n.enabled && !skipped.has(n.id)).map((n) => n.id);
     assign([...items, ...scene.universes.map((u) => u.id)]);
     const top = (id) => scene.ancestors(id).at(-1) ?? id;
+    const world = scene.resolveWorld();
+    const keys = itemKeys(scene, items, world);
+    job = { gen, world, keys, cached: new Map(), states: new Map(), started: performance.now(), saved: false };
+    // Items holding a selected node are built anyway: its ghost and result need their solids.
+    const forced = new Set(focus.map(top).filter((t) => keys.has(t) && !focus.includes(t)));
+    for (const id of items) {
+      const parts = memory.get(keys.get(id));
+      if (parts) {
+        job.cached.set(id, parts);
+        remember(keys.get(id), parts);
+      }
+    }
+    const missing = items.filter((id) => !job.cached.has(id));
+    const thisJob = job;
+    const dispatch = () => {
+      if (job !== thisJob) return;
+      dispatchJob(scene, items.filter((id) => !job.cached.has(id) || forced.has(id)), focus, surfaces, top);
+    };
+    if (missing.length && store) {
+      // Look the rest up in the persistent cache first.
+      storeReady
+        .then((s) => (s ? s.getMany(missing.map((id) => keys.get(id))) : new Map()))
+        .then((found) => {
+          if (job !== thisJob) return;
+          for (const id of missing) {
+            const parts = found.get(keys.get(id));
+            if (!parts) continue;
+            job.cached.set(id, parts);
+            remember(keys.get(id), parts);
+          }
+          dispatch();
+        })
+        .catch(dispatch);
+      emit();
+    } else dispatch();
+  }
+
+  function dispatchJob(scene, toBuild, focus, surfaces, top) {
     const json = scene.toJSON();
-    job = { gen, world: scene.resolveWorld(), states: new Map(), started: performance.now() };
+    const gen = job.gen;
     lanes.forEach((lane, i) => {
-      const roots = items.filter((id) => owner.get(id) === i);
+      const roots = toBuild.filter((id) => owner.get(id) === i);
       const f = focus.filter((id) => (owner.get(top(id)) ?? 0) === i);
       const sf = i === 0 ? surfaces : [];
       const state = { final: false, parts: new Map(), errors: [], solids: [], surfaces: [], done: 0, total: roots.length };
@@ -112,6 +174,7 @@ export function createEvalService({ onUpdate, workers = defaultWorkers() } = {})
       if (!roots.length && !f.length && !sf.length) state.final = true;
       else lane.post({ gen, scene: json, roots, focus: f, surfaces: sf });
     });
+    job.dispatched = true;
     emit();
   }
 
@@ -146,7 +209,10 @@ export function createEvalService({ onUpdate, workers = defaultWorkers() } = {})
   }
 
   function emit() {
-    const res = { parts: new Map(), solids: new Map(), errors: new Map(), surfaces: new Map(), world: job.world, partial: false, done: 0, total: 0, live: 0, ms: performance.now() - job.started };
+    const res = { parts: new Map(), solids: new Map(), errors: new Map(), surfaces: new Map(), world: job.world, partial: !job.dispatched, done: 0, total: 0, live: 0, ms: performance.now() - job.started, cached: job.cached.size };
+    for (const [id, parts] of job.cached) res.parts.set(id, parts);
+    res.done += job.cached.size;
+    res.total += job.cached.size;
     for (const [i, state] of job.states) {
       for (const [id, list] of state.parts) res.parts.set(id, list.map((d) => resolve(i, d)).filter(Boolean));
       for (const [id, msg] of state.errors) res.errors.set(id, msg);
@@ -158,13 +224,40 @@ export function createEvalService({ onUpdate, workers = defaultWorkers() } = {})
       res.partial ||= !state.final;
     }
     res.live = lanes.reduce((s, lane) => s + (lane.live ?? 0), 0);
+    // Items built by the workers count once: subtract those also served from the cache.
+    for (const [, state] of job.states) for (const id of state.parts.keys()) if (job.cached.has(id)) (res.done--, res.total--);
+    if (!res.partial && !job.saved) save(res);
     onUpdate?.(res);
+  }
+
+  /** Saves the items the workers built in this job (complete, without errors) for later. */
+  function save(res) {
+    job.saved = true;
+    for (const [i, state] of job.states) {
+      for (const [id, list] of state.parts) {
+        const key = job.keys.get(id);
+        if (!key || job.cached.has(id) || res.errors.has(id)) continue;
+        const parts = res.parts.get(id);
+        if (!parts || parts.length !== list.length) continue; // a mesh was missing
+        remember(key, parts);
+        meshStore?.put(key, parts);
+      }
+    }
   }
 
   return {
     run,
     get workers() {
       return inline ? 0 : lanes.length;
+    },
+    /** The persistent cache (null without one): size, entries, clear(). */
+    get store() {
+      return meshStore;
+    },
+    /** Empties the persistent cache and the memory in front of it. */
+    async clearCache() {
+      memory.clear();
+      await (await storeReady)?.clear();
     },
   };
 }
