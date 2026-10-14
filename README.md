@@ -77,7 +77,7 @@ npm run demo    # builder at http://localhost:1948/
   New, From library, Duplicate and Delete. When one operation, cell or universe is selected,
   new nodes go inside it.
 - **Top bar**: a *File* menu (New, Open… <kbd>Ctrl+O</kbd>, Save
-  <kbd>Ctrl+S</kbd>, Export as → OpenMC XML…), *Settings* (light/dark theme or follow the OS,
+  <kbd>Ctrl+S</kbd>, Export as → OpenMC XML…), *Settings* (light/dark theme or follow the OS, viewport statistics,
   world box, curved-surface tessellation, up axis), and *Help* (Tutorial…, Keyboard shortcuts…
   <kbd>?</kbd>).
 - **Scene tree**: shows the CSG tree. Subtract children are badged *base* or

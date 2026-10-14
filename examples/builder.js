@@ -1397,8 +1397,35 @@ function appearanceSettings() {
     { onchange: (e) => setTheme(e.target.value) },
     [["dark", "Dark"], ["light", "Light"], ["system", "System (follow the OS)"]].map(([v, l]) => h("option", { value: v, selected: v === themePref }, l)),
   );
-  return h("div", { class: "section" }, h("h3", {}, "Appearance"), field("Theme", select));
+  const stats = h("input", {
+    type: "checkbox",
+    checked: showStats,
+    style: "justify-self:start",
+    title: "Triangles drawn, last evaluation time, and live CSG solids, in the viewport's bottom-right corner",
+    onchange: (e) => setShowStats(e.target.checked),
+  });
+  return h("div", { class: "section" }, h("h3", {}, "Appearance"), field("Theme", select), field("Statistics", stats, "Show performance statistics in the viewport"));
 }
+
+// Viewport statistics (triangles · evaluation ms · live solids): a per-browser
+// preference, off by default.
+const STATS_KEY = "critica.builder.stats";
+let showStats = false;
+try {
+  showStats = localStorage.getItem(STATS_KEY) === "on";
+} catch {
+  // Storage unavailable: hidden.
+}
+function setShowStats(on) {
+  showStats = on;
+  $("stats").hidden = !on;
+  try {
+    localStorage.setItem(STATS_KEY, on ? "on" : "off");
+  } catch {
+    // Storage unavailable: the choice lasts for this session.
+  }
+}
+$("stats").hidden = !showStats;
 
 function worldSettings() {
   const w = scene.world;
