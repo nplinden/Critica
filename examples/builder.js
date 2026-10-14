@@ -3248,7 +3248,7 @@ function renderTutorial() {
       {},
       h("li", {}, "Select several nodes with ", k("Ctrl"), "-click, then press ", b("Union"), ", ", b("Subtract"), ", ", b("Intersect"), " or ", b("Complement"), "."),
       h("li", {}, "For Subtract, the ", b("first"), " node you select is the base; the numbers in the tree show the order."),
-      h("li", {}, "Drag rows in the scene tree to reorganize. The ● toggle excludes a node without deleting it."),
+      h("li", {}, "Drag rows in the scene tree to reorganize. The ● toggle excludes a node without deleting it; references to it keep working, so a shape used only through references can be hidden this way."),
       h("li", {}, "A region can be used by several cells: combining a new shape with a region that belongs to a cell ", b("reuses it by reference"), " (↪) instead of moving it, e.g. water = box − fuel. ", b("Reference"), " (", k("R"), ") does it explicitly; edits to the source update every use."),
     ),
     h("h3", {}, "3 · Make OpenMC cells"),

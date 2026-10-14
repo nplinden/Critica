@@ -85,7 +85,9 @@ npm run demo    # builder at http://localhost:1948/
   *cut*, and leaf icons use the same color as the faces they produce.
   Ctrl-click selects several nodes; the numbers show selection order, and the
   first selected becomes the Subtract base. Drag rows to reorder or reparent
-  them. The ● toggle excludes a node from its parent without deleting it.
+  them. The ● toggle excludes a node from its parent without deleting it; a
+  disabled top-level shape is just hidden, and references (↪) to a disabled
+  node still use it.
 - **Surfaces**: the *Surfaces* section under the tree lists every surface of
   the scene, used or not (unused ones are not exported; <kbd>Del</kbd> deletes
   them). Double-click a surface (or <kbd>F2</kbd>, or *Rename…* in its

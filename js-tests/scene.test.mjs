@@ -278,3 +278,25 @@ test("adding a material copy without an id allocates the next free id", () => {
   assert.equal(s.materials.undefined, undefined);
   assert.equal(s.addMaterial({ id: 10 }).id, 10);
 });
+
+test("a disabled source is hidden but its references still use it", async () => {
+  const { exportOpenMC } = await import("../examples/openmc/export.js");
+  const s = new Scene();
+  const rod = s.add("cylinder", { params: { radius: 0.3, height: 10, slices: 24, axis: "z" } });
+  const cell = s.add("cell");
+  const sub = s.add("subtract", {}, cell.id);
+  s.add("sphere", { params: { radius: 2, slices: 24, stacks: 12 } }, sub.id);
+  s.add("ref", { params: { target: rod.id } }, sub.id);
+  const ev = new Evaluator(geo);
+  const volume = () => ev.run(s).parts.get(cell.id).reduce((v, p) => v + p.solid.volume, 0);
+  const cut = volume();
+  rod.enabled = false;
+  const out = ev.run(s);
+  assert.equal(out.parts.has(rod.id), false, "the disabled top-level shape is not drawn");
+  close(volume(), cut, 1e-9);
+  assert.ok(Number.isFinite(s.regionBounds(sub).max[0]), "bounds follow the reference");
+  const xml = exportOpenMC(s).geometry;
+  assert.match(xml, /z-cylinder/, "the export still cuts with the rod");
+  assert.equal((xml.match(/<cell /g) ?? []).length, 2, "but does not write the rod as a cell");
+  ev.dispose();
+});

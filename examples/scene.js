@@ -575,9 +575,9 @@ export class Scene {
 
   // ---- bounds -----------------------------------------------------------------
 
-  /** Conservative analytic bounds of a region node (may be infinite). */
-  regionBounds(node, negated = false) {
-    if (!node || !node.enabled) return negated ? infiniteBox() : emptyBox();
+  /** Conservative analytic bounds of a region node (may be infinite); `viaRef` as in the evaluator. */
+  regionBounds(node, negated = false, viaRef = false) {
+    if (!node || (!node.enabled && !viaRef)) return negated ? infiniteBox() : emptyBox();
     let box;
     if (node.kind === "halfspace") {
       const s = this.surfaces.get(node.params.surface);
@@ -589,7 +589,7 @@ export class Scene {
       if (!target || (this._refDepth ?? 0) > MAX_REF_DEPTH) return infiniteBox();
       this._refDepth = (this._refDepth ?? 0) + 1;
       try {
-        box = this.regionBounds(target, negated);
+        box = this.regionBounds(target, negated, true);
       } finally {
         this._refDepth--;
       }
@@ -931,8 +931,13 @@ export class Evaluator {
 
   // ---- region values ----
 
-  #value(node, ctx) {
-    if (!node.enabled) return undefined;
+  /**
+   * A node's value, or undefined when it is disabled. `viaRef`: reached through
+   * a reference, which uses its source even when the source is disabled
+   * (disabling a top-level shape hides it without breaking its references).
+   */
+  #value(node, ctx, viaRef = false) {
+    if (!node.enabled && !viaRef) return undefined;
     let value;
     try {
       value = this.#computeValue(node, ctx);
@@ -963,7 +968,7 @@ export class Evaluator {
       if (this.refDepth > MAX_REF_DEPTH) throw new Error("reference cycle");
       this.refDepth++;
       try {
-        value = this.#value(target, local) ?? EMPTY;
+        value = this.#value(target, local, true) ?? EMPTY;
       } finally {
         this.refDepth--;
       }

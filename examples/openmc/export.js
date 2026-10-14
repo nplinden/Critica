@@ -100,9 +100,12 @@ export function exportOpenMC(scene, { worldBoundary = "auto" } = {}) {
   };
 
   let refDepth = 0;
-  /** Compiles a region node into an AST, with `m` the transform of its parent frame. */
-  const compile = (node, m) => {
-    if (!node.enabled) return null;
+  /**
+   * Compiles a region node into an AST, with `m` the transform of its parent
+   * frame. A reference compiles its source even when the source is disabled.
+   */
+  const compile = (node, m, viaRef = false) => {
+    if (!node.enabled && !viaRef) return null;
     const local = isIdentity(node.transform) ? m : M4.multiply(m, M4.fromTransform(node.transform));
     if (node.kind === "halfspace") {
       const s = scene.surfaces.get(node.params.surface);
@@ -116,7 +119,7 @@ export function exportOpenMC(scene, { worldBoundary = "auto" } = {}) {
       refDepth++;
       try {
         // Same surfaces as the source (merged by the surface dedupe).
-        return compile(target, local) ?? EMPTY;
+        return compile(target, local, true) ?? EMPTY;
       } finally {
         refDepth--;
       }
