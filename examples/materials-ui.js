@@ -417,7 +417,8 @@ export function createMaterialsWorkspace(ctx) {
     ctx.changed();
     select(m.id);
   }
-  $("mat-duplicate").onclick = () => {
+  /** Copies the selected material under a new id and selects the copy (ribbon: Duplicate). */
+  function duplicateMaterial() {
     const m = current();
     if (!m) return;
     const copy = scene().addMaterial({ ...JSON.parse(JSON.stringify(m)), id: undefined, name: `${m.name} copy` });
@@ -425,8 +426,9 @@ export function createMaterialsWorkspace(ctx) {
     ctx.commit();
     ctx.changed();
     select(copy.id);
-  };
-  $("mat-delete").onclick = () => {
+  }
+  /** Deletes the selected material; cells naming it keep the id (ribbon: Delete). */
+  function deleteMaterial() {
     const m = current();
     if (!m) return;
     const users = scene().materialUsers(m.id).length;
@@ -436,7 +438,7 @@ export function createMaterialsWorkspace(ctx) {
     ctx.changed();
     render();
     ctx.setMessage(users ? `Deleted material ${m.id}; ${users} cell(s) still reference it (Ctrl+Z to undo).` : `Deleted material ${m.id}.`, users > 0);
-  };
+  }
 
   // ---- library picker (PNNL compendium bundled with OpenMC) ----
 
@@ -482,6 +484,8 @@ export function createMaterialsWorkspace(ctx) {
     select,
     newMaterial,
     openLibrary,
+    duplicateMaterial,
+    deleteMaterial,
     /** Selects the first material, or keeps the current one. */
     get selected() {
       return selected;

@@ -2614,8 +2614,8 @@ $("ribbon-mat-library").append(
   h("button", { class: "tb", title: "Add a reference material from the PNNL compendium bundled with OpenMC", onclick: () => materialsUI.openLibrary() }, icon("library"), h("span", { class: "label" }, "From library")),
 );
 $("ribbon-mat-edit").append(
-  h("button", { class: "tb", title: "Duplicate the selected material", onclick: () => $("mat-duplicate").click() }, icon("duplicate"), "Duplicate"),
-  h("button", { class: "tb", title: "Delete the selected material", onclick: () => $("mat-delete").click() }, icon("trash"), "Delete"),
+  h("button", { class: "tb", title: "Duplicate the selected material", onclick: () => materialsUI.duplicateMaterial() }, icon("duplicate"), h("span", { class: "label" }, "Duplicate")),
+  h("button", { class: "tb", title: "Delete the selected material", onclick: () => materialsUI.deleteMaterial() }, icon("trash"), h("span", { class: "label" }, "Delete")),
 );
 
 // The ribbon can be collapsed to give the canvas more room; remembered.

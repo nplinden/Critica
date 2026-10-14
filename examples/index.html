@@ -175,8 +175,6 @@
   .mat-row:hover { background: var(--panel-2); }
   .mat-row.selected { background: var(--accent-bg); border-color: var(--accent); }
   .mat-row .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .mat-list-actions { display: flex; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--line); }
-  .mat-list-actions .tb { border-color: var(--line-2); }
   #mat-editor .section, #mat-summary .section { max-width: 760px; }
   .density-row { display: grid; grid-template-columns: 1fr 1.3fr; gap: 6px; margin: 5px 0; }
   .unit-input { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; }
@@ -354,7 +352,7 @@
   </div>
   <div class="ribbon-panel" id="ribbon-materials" role="tabpanel" aria-labelledby="tab-materials" hidden>
     <div class="rgroup"><div class="rgroup-body big" id="ribbon-mat-library"></div><div class="rgroup-label">Library</div></div>
-    <div class="rgroup"><div class="rgroup-body"><div class="rstack" id="ribbon-mat-edit"></div></div><div class="rgroup-label">Material</div></div>
+    <div class="rgroup"><div class="rgroup-body big" id="ribbon-mat-edit"></div><div class="rgroup-label">Material</div></div>
   </div>
 </div>
 <dialog class="modal" id="tutorial" aria-labelledby="tutorial-title">
@@ -396,7 +394,6 @@
     <h2>Material library</h2>
     <div class="mat-search-row"><input type="text" id="mat-search" placeholder="Filter by id or name" spellcheck="false"></div>
     <div id="mat-list"></div>
-    <div class="mat-list-actions"><button class="tb" id="mat-duplicate">Duplicate</button><button class="tb" id="mat-delete">Delete</button></div>
   </section>
   <section class="panel" id="mat-editor"></section>
   <aside class="panel" id="mat-summary"></aside>
